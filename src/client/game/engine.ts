@@ -125,6 +125,11 @@ export class PitchKickGame {
   private lastKicker: PlayerEntity | null = null;
   private kickerLock = 0;
   private cpuDecision = 0;
+  /** Protection window after winning the ball — can't be tackled. */
+  private stealProtect = 0;
+  /** The player who just lost a tackle can't immediately win the ball back. */
+  private dispossessed: PlayerEntity | null = null;
+  private dispossessedTimer = 0;
 
   private homeScore = 0;
   private awayScore = 0;
@@ -225,6 +230,9 @@ export class PitchKickGame {
     this.owner = null;
     this.lastKicker = null;
     this.kickerLock = 0;
+    this.stealProtect = 0;
+    this.dispossessed = null;
+    this.dispossessedTimer = 0;
     this.freeze = 0.9;
   }
 
@@ -327,6 +335,11 @@ export class PitchKickGame {
     if (this.kickerLock > 0) this.kickerLock -= dt;
     else this.lastKicker = null;
     if (this.cpuDecision > 0) this.cpuDecision -= dt;
+    if (this.stealProtect > 0) this.stealProtect -= dt;
+    if (this.dispossessedTimer > 0) {
+      this.dispossessedTimer -= dt;
+      if (this.dispossessedTimer <= 0) this.dispossessed = null;
+    }
     for (const p of [...this.homePlayers, ...this.awayPlayers]) {
       if (p.kickTimer > 0) p.kickTimer -= dt;
     }
@@ -635,14 +648,50 @@ export class PitchKickGame {
   // ---- possession / ball ---------------------------------------------------
 
   private resolvePossession() {
+    const prev = this.owner;
+
     let best: PlayerEntity | null = null;
     let bestD = Infinity;
     for (const p of [...this.homePlayers, ...this.awayPlayers]) {
       if (this.kickerLock > 0 && p === this.lastKicker) continue;
+      // A freshly dispossessed player can't win the ball straight back.
+      if (this.dispossessed === p) continue;
       const d = dist(p, this.ball);
       if (d <= CONTROL_DIST && d < bestD) {
         bestD = d;
         best = p;
+      }
+    }
+
+    // Hysteresis: the current owner keeps the ball against challengers
+    // unless the challenger gets meaningfully closer AND the protection
+    // window from winning it has elapsed.
+    if (prev && best && best !== prev && this.dispossessed !== prev) {
+      const prevD = dist(prev, this.ball);
+      if (prevD <= CONTROL_DIST + 4) {
+        const challengerWins =
+          this.stealProtect <= 0 &&
+          (best.team === prev.team || bestD < prevD - 7);
+        if (!challengerWins) best = prev;
+      }
+    }
+
+    // Possession changed hands.
+    if (best && best !== prev) {
+      if (prev && prev.team !== best.team) {
+        // Tackle won: protect the winner, lock out the loser briefly,
+        // and knock the ball to the winner's side so it visibly comes free.
+        this.stealProtect = 0.6;
+        this.dispossessed = prev;
+        this.dispossessedTimer = 0.9;
+        const dx = best.x - prev.x;
+        const dy = best.y - prev.y;
+        const l = len(dx, dy);
+        this.ball.x = best.x + (dx / l) * 6;
+        this.ball.y = best.y + (dy / l) * 6;
+      } else {
+        // Clean receive (pass or loose ball) — short protection.
+        this.stealProtect = 0.35;
       }
     }
 
