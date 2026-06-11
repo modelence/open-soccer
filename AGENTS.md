@@ -29,6 +29,15 @@ game state yet (no Stores/queries for gameplay).
 - Passes target a real teammate chosen by facing-direction alignment +
   distance preference (short ~220px, long = farthest forward, through ~320px).
   Control follows YOUR pass to the receiver (user-initiated, FIFA-style).
+- Switch selection (`switchScore`, lower = better): when CPU has the ball,
+  candidates are scored by distance to an INTERCEPT point ~70px ahead of
+  the carrier (direction = 50/50 blend of "toward home goal at x=0" and
+  carrier velocity), with -55 bonus for goal-side players (p.x < carrier.x-5)
+  and +60 penalty for players behind the play (p.x > carrier.x+15).
+  Loose ball / own possession: distance to ball position + vel*0.35.
+  User demanded this after Q kept picking players above/below the carrier
+  instead of the goal-side defender. Hint shows when candidate score +25
+  beats controlled's score.
 - NO other automatic switching (user explicitly requested this). A hollow ▽
   marker (`switchHint`) shows who Q would select: home ball-owner if not
   controlled, else nearest home player to ball when meaningfully (30px)

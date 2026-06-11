@@ -389,6 +389,69 @@ export class PitchKickGame {
   }
 
   /**
+   * FIFA-style switch scoring (lower = better candidate).
+   *
+   * When the CPU has the ball, the best player to switch to is NOT the one
+   * radially closest to the ball — it's the one best placed to intercept
+   * the carrier's path toward OUR goal: we project an intercept point in
+   * front of the carrier (toward the home goal) and strongly prefer
+   * goal-side defenders over players level with or behind the play.
+   */
+  private switchScore(p: PlayerEntity): number {
+    const carrier = this.owner && this.owner.team === 'away' ? this.owner : null;
+
+    if (carrier) {
+      // Direction of the attack: blend "toward our goal" with the
+      // carrier's actual movement.
+      const goal = { x: 0, y: FIELD_H / 2 };
+      const gl = len(goal.x - carrier.x, goal.y - carrier.y);
+      let dirX = (goal.x - carrier.x) / gl;
+      let dirY = (goal.y - carrier.y) / gl;
+      const sp = len(carrier.vx, carrier.vy);
+      if (sp > 40) {
+        dirX = dirX * 0.5 + (carrier.vx / sp) * 0.5;
+        dirY = dirY * 0.5 + (carrier.vy / sp) * 0.5;
+        const dl = len(dirX, dirY);
+        dirX /= dl;
+        dirY /= dl;
+      }
+      const intercept = {
+        x: carrier.x + dirX * 70,
+        y: carrier.y + dirY * 70,
+      };
+
+      let score = dist(p, intercept);
+      // Goal-side (between carrier and our goal) is what defending is
+      // about — reward it; punish being behind the play.
+      if (p.x < carrier.x - 5) score -= 55;
+      else if (p.x > carrier.x + 15) score += 60;
+      return score;
+    }
+
+    // Loose ball (or our own possession): closest to where the ball is
+    // heading wins.
+    const ahead = {
+      x: clamp(this.ball.x + this.ball.vx * 0.35, 0, FIELD_W),
+      y: clamp(this.ball.y + this.ball.vy * 0.35, 0, FIELD_H),
+    };
+    return dist(p, ahead);
+  }
+
+  private bestSwitchCandidate(exclude: PlayerEntity): PlayerEntity | null {
+    let best: PlayerEntity | null = null;
+    let bestScore = Infinity;
+    for (const p of this.homePlayers) {
+      if (p === exclude) continue;
+      const s = this.switchScore(p);
+      if (s < bestScore) {
+        bestScore = s;
+        best = p;
+      }
+    }
+    return best;
+  }
+
+  /**
    * Compute who Q would switch to. No automatic switching happens here —
    * the hint is only a marker until the user presses Q (passing is the one
    * exception: control follows the pass you played).
@@ -398,11 +461,12 @@ export class PitchKickGame {
       this.switchHint = this.owner;
       return;
     }
-    const candidate = this.nearestTo(this.homePlayers, this.ball, this.controlled);
-    // Only suggest a switch when the candidate is meaningfully closer.
+    const candidate = this.bestSwitchCandidate(this.controlled);
+    // Only suggest a switch when the candidate is meaningfully better
+    // positioned than the player you already control.
     if (
       candidate &&
-      dist(candidate, this.ball) + 30 < dist(this.controlled, this.ball)
+      this.switchScore(candidate) + 25 < this.switchScore(this.controlled)
     ) {
       this.switchHint = candidate;
     } else {
@@ -413,8 +477,7 @@ export class PitchKickGame {
   private handleSwitchKey() {
     if (!this.justPressed.includes('KeyQ')) return;
     const target =
-      this.switchHint ??
-      this.nearestTo(this.homePlayers, this.ball, this.controlled);
+      this.switchHint ?? this.bestSwitchCandidate(this.controlled);
     if (target) {
       this.controlled = target;
       this.switchHint = null;
