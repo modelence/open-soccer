@@ -105,6 +105,16 @@ function clamp(v: number, lo: number, hi: number) {
   return Math.max(lo, Math.min(hi, v));
 }
 
+/** Distance from point p to the line segment a→b. */
+function distToSegment(p: Vec, a: Vec, b: Vec) {
+  const abx = b.x - a.x;
+  const aby = b.y - a.y;
+  const lenSq = abx * abx + aby * aby;
+  if (lenSq === 0) return dist(p, a);
+  const t = clamp(((p.x - a.x) * abx + (p.y - a.y) * aby) / lenSq, 0, 1);
+  return dist(p, { x: a.x + abx * t, y: a.y + aby * t });
+}
+
 export class PitchKickGame {
   private ctx: CanvasRenderingContext2D;
   private raf = 0;
@@ -456,9 +466,12 @@ export class PitchKickGame {
   }
 
   /**
-   * FIFA-style assisted shot: the ball always goes toward the goal you
-   * attack; the vertical arrow input picks the placement in the frame —
-   * up = top corner, down = bottom corner, neutral = center.
+   * FIFA-style assisted shot. The ball always goes toward the goal you
+   * attack; the vertical arrow input picks the *zone* of the frame
+   * (up = top half, down = bottom half, neutral = anywhere), and within
+   * that zone the engine picks the placement with the clearest shooting
+   * lane — i.e. the spot furthest from any blocking player, like FIFA's
+   * assisted finishing steering shots away from the keeper/defenders.
    */
   private shootAssisted(kicker: PlayerEntity) {
     let vert = 0;
@@ -473,15 +486,54 @@ export class PitchKickGame {
       else if (kicker.facing.y > 0.45) vert = 1;
     }
 
-    const inset = 18; // inside the post
-    const ty =
-      vert < 0
-        ? goalTop + inset
-        : vert > 0
-          ? goalBottom - inset
-          : (goalTop + goalBottom) / 2;
+    const inset = 16; // keep aim inside the posts
+    const mid = (goalTop + goalBottom) / 2;
+    // Zone of the frame the input allows, and the spot the input "wants".
+    let zoneLo = goalTop + inset;
+    let zoneHi = goalBottom - inset;
+    let desiredY = mid;
+    if (vert < 0) {
+      zoneHi = mid - 8;
+      desiredY = goalTop + inset; // top corner
+    } else if (vert > 0) {
+      zoneLo = mid + 8;
+      desiredY = goalBottom - inset; // bottom corner
+    }
 
-    this.kickBallToward({ x: FIELD_W - 2, y: ty }, 660, kicker);
+    // Sample candidate placements across the allowed zone and score each
+    // by how clear the shooting lane is (distance of the nearest blocker
+    // to the ball→target line), with a tie-break preference for the spot
+    // the player's input asked for.
+    const blockers = [...this.awayPlayers, ...this.homePlayers].filter(
+      (p) => p !== kicker,
+    );
+    const goalX = FIELD_W - 2;
+    const zoneSpan = Math.max(zoneHi - zoneLo, 1);
+    const SAMPLES = 9;
+    let bestY = desiredY;
+    let bestScore = -Infinity;
+    for (let i = 0; i < SAMPLES; i++) {
+      const ty = zoneLo + (zoneSpan * i) / (SAMPLES - 1);
+      const target = { x: goalX, y: ty };
+      let clearance = Infinity;
+      for (const b of blockers) {
+        clearance = Math.min(
+          clearance,
+          distToSegment(b, this.ball, target) - b.r,
+        );
+      }
+      // Clearance dominates (capped so wide-open lanes stop competing),
+      // input preference breaks ties between similarly open lanes.
+      const score =
+        Math.min(clearance, 50) +
+        (1 - Math.abs(ty - desiredY) / zoneSpan) * 16;
+      if (score > bestScore) {
+        bestScore = score;
+        bestY = ty;
+      }
+    }
+
+    this.kickBallToward({ x: goalX, y: bestY }, 660, kicker);
   }
 
   private passAssisted(

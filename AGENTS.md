@@ -16,11 +16,16 @@ game state yet (no Stores/queries for gameplay).
 ### Controls (FIFA PC style)
 - Arrows = move, E = sprint, D = shot, S = short pass, A = long pass,
   W = through pass (leads receiver ~110px toward goal), Q = switch player.
-- Shot assist (`shootAssisted`): shot always goes toward the CPU goal;
-  the VERTICAL arrow held at the moment of pressing D picks placement —
-  Up = top corner (goalTop+18), Down = bottom corner, horizontal-only or
-  none = center. With no arrows held, the kicker's facing.y lean (>0.45)
-  picks the corner. User explicitly requested this FIFA behavior.
+- Shot assist (`shootAssisted`): shot always goes toward the CPU goal.
+  The VERTICAL arrow held at the moment of pressing D picks the ZONE of
+  the frame (Up = top half, desired spot = top corner; Down = bottom
+  half; none/horizontal-only = whole frame, desired = center; facing.y
+  lean >0.45 fallback when no arrows held). Within the zone, 9 candidate
+  y's are sampled and scored: min(clearance,50) + inputPreference*16,
+  where clearance = nearest distance of ANY other player (both teams) to
+  the ball->target segment minus their radius (distToSegment helper near
+  top of engine.ts). Picks the clearest lane so shots steer around
+  blockers — user demanded this after shots kept hitting opponents.
 - Passes target a real teammate chosen by facing-direction alignment +
   distance preference (short ~220px, long = farthest forward, through ~320px).
   Control follows YOUR pass to the receiver (user-initiated, FIFA-style).
