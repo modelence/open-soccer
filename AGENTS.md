@@ -15,17 +15,41 @@ game state yet (no Stores/queries for gameplay).
 
 ### Controls (FIFA PC style)
 - Arrows = move, E = sprint, D = shot (aims at CPU goal), S = short pass,
-  A = long pass, W = through pass (leads receiver ~120px toward goal).
+  A = long pass, W = through pass (leads receiver ~110px toward goal),
+  Q = switch player.
 - Passes target a real teammate chosen by facing-direction alignment +
   distance preference (short ~220px, long = farthest forward, through ~320px).
-  Control auto-switches to the receiver on pass.
+  Control follows YOUR pass to the receiver (user-initiated, FIFA-style).
+- NO other automatic switching (user explicitly requested this). A hollow ▽
+  marker (`switchHint`) shows who Q would select: home ball-owner if not
+  controlled, else nearest home player to ball when meaningfully (30px)
+  closer than the controlled one. Solid volt ▼ = controlled player.
+- If a non-controlled home teammate ends up owning the ball, they stand and
+  shield it until the user presses Q to take over.
+
+### Visuals: procedural humanoid sprites (NOT external assets)
+- `drawHumanoid()` in engine.ts draws top-down footballers (Sensible-Soccer
+  style): boots + arms swing with a distance-driven run cycle (`animPhase`),
+  kick pose via `kickTimer` (0.28s, set in `afterKick`), torso ellipse with
+  kit/sleeve/outline colors, skin+hair head. Whole body rotates to `facing`.
+- Kits: HOME_KIT blue / AWAY_KIT red; HAIR_COLORS/SKIN_TONES vary per player.
+- Players y-sorted before drawing for natural overlap.
+- Researched open sprite options: Kenney Sports Pack (CC0, has top-down
+  soccer but static poses, no run/kick frames); LPC sprites are 4-dir 3/4
+  view — wrong for 360° top-down rotation. Procedural chosen deliberately.
+  If user uploads a spritesheet via File Manager, can swap it in.
+
+### Movement feel (tuned for smoothness, v2)
+- Inertia: `steer()` lerps velocity toward target (`ACCEL=8`/s); facing
+  rotates at max `TURN_RATE=13` rad/s (`faceToward`). AI `moveToward`
+  decelerates within 36px of target to prevent orbiting.
+- Speeds (slowed from v1): walk 165, sprint 255, teammate 155, CPU chase
+  180 / carry 165 / formation 140. Shot power 660, CPU shot 640.
 
 ### Gameplay model (current: 4v4)
 - Both teams: 4 players in a diamond formation (`FORMATION` fractions in
-  engine.ts: defender / 2 mids / forward, shirts 2–5). Away is x-mirrored.
-- You = blue, attack right. Controlled player marked with volt ▼ triangle;
-  ball owner gets a lime ring. Auto-switch: controlled = home owner, else
-  nearest home player to ball (0.35s cooldown to avoid flicker).
+  engine.ts: defender / 2 mids / forward). Away is x-mirrored.
+- You = blue, attack right. Ball owner gets a lime ring.
 - Non-controlled teammates hold formation, shifted by ball position
   (`formationTarget`: anchor + ball offset * 0.35x/0.25y).
 - CPU AI: carrier dribbles toward left goal, shoots when x < 250, passes to a
