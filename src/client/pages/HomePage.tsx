@@ -121,8 +121,10 @@ export default function HomePage() {
               READY TO <span className="text-volt-500">KICK OFF?</span>
             </h1>
             <p className="font-body text-night-600 mb-8 text-center max-w-md">
-              You are the <span className="text-home-500 font-semibold">blue</span> player.
-              Take on the CPU, beat the keeper, and bang in the goals.
+              4v4 against the CPU. You control the{' '}
+              <span className="text-home-500 font-semibold">blue</span> player marked
+              with a <span className="text-volt-400 font-semibold">▼</span> — passes
+              switch you to the receiver automatically.
             </p>
             <button
               onClick={handleStart}
@@ -153,8 +155,9 @@ export default function HomePage() {
       </div>
 
       <p className="mt-5 text-xs text-night-700 font-body text-center max-w-xl">
-        Tip: get close to the ball to take control (you'll get a lime ring), point
-        toward goal, then press <span className="text-volt-400">D</span> to shoot.
+        Tip: passes go to the teammate you're facing — face up the pitch and hit{' '}
+        <span className="text-volt-400">W</span> to play a through ball into space,
+        then <span className="text-volt-400">D</span> to shoot.
       </p>
     </div>
   );

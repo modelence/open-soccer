@@ -15,19 +15,32 @@ game state yet (no Stores/queries for gameplay).
 
 ### Controls (FIFA PC style)
 - Arrows = move, E = sprint, D = shot (aims at CPU goal), S = short pass,
-  A = long pass, W = through pass. Passes currently just kick in the facing
-  direction (no teammates yet).
+  A = long pass, W = through pass (leads receiver ~120px toward goal).
+- Passes target a real teammate chosen by facing-direction alignment +
+  distance preference (short ~220px, long = farthest forward, through ~320px).
+  Control auto-switches to the receiver on pass.
 
-### Gameplay model (current slice)
-- You = blue (left side, attack right). CPU = red, single chaser that carries
-  toward your goal and shoots when close. Possession = nearest player within
-  control distance gets a lime ring + dribbles the ball ahead.
-- Ball bounces off all walls except the goal mouths (no throw-ins yet).
-- 2-minute match timer counting down; goals reset to kickoff; full-time verdict.
+### Gameplay model (current: 4v4)
+- Both teams: 4 players in a diamond formation (`FORMATION` fractions in
+  engine.ts: defender / 2 mids / forward, shirts 2–5). Away is x-mirrored.
+- You = blue, attack right. Controlled player marked with volt ▼ triangle;
+  ball owner gets a lime ring. Auto-switch: controlled = home owner, else
+  nearest home player to ball (0.35s cooldown to avoid flicker).
+- Non-controlled teammates hold formation, shifted by ball position
+  (`formationTarget`: anchor + ball offset * 0.35x/0.25y).
+- CPU AI: carrier dribbles toward left goal, shoots when x < 250, passes to a
+  more-advanced open teammate when pressured (<85px); nearest non-carrier
+  chases ball with anticipation; rest hold formation. Decisions every 0.45s.
+- Possession: nearest player (either team) within CONTROL_DIST grabs ball;
+  kicker is excluded for 0.45s after kicking (`lastKicker`/`kickerLock`) so
+  passes aren't instantly re-grabbed; lock clears when anyone receives.
+- Ball bounces off all walls except goal mouths (no throw-ins yet).
+- 2-minute timer; goals reset to kickoff (conceding team kicks off);
+  full-time verdict freezes play.
 
 ### NOT YET BUILT (future slices)
-- Teammates / a full team, so passes actually target a player.
 - Goalkeepers as distinct entities, offside, fouls, throw-ins/corners.
+- Manual player switch key, tackling/slide tackle.
 - Difficulty levels, player stats, persistence of results to a Store.
 
 ## Comprehensive Project Structure Overview
