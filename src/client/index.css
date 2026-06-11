@@ -1,3 +1,76 @@
+@import url('https://fonts.googleapis.com/css2?family=Teko:wght@400;500;600;700&family=Oswald:wght@400;500;600;700&family=Barlow:wght@400;500;600&display=swap');
 @import "tailwindcss";
 
 @source "./";
+
+/* ----------------------------------------------------------------------------
+   PitchKick — design system
+   Aesthetic: floodlit-stadium arcade football. Deep midnight pitch-side
+   darkness, vivid grass green, and an electric-lime "broadcast" accent.
+   Display type is condensed and sporty (Teko / Oswald), body is Barlow.
+---------------------------------------------------------------------------- */
+
+@theme {
+  --font-display: 'Teko', sans-serif;
+  --font-heading: 'Oswald', sans-serif;
+  --font-body: 'Barlow', sans-serif;
+
+  /* Pitch-side darkness */
+  --color-night-950: #070b10;
+  --color-night-900: #0c1219;
+  --color-night-800: #131c27;
+  --color-night-700: #1e2b3a;
+  --color-night-600: #2c3e52;
+
+  /* Grass */
+  --color-pitch-700: #1f6b3a;
+  --color-pitch-600: #258044;
+  --color-pitch-500: #2e9b53;
+
+  /* Electric broadcast accents */
+  --color-volt-500: #c6ff2e;
+  --color-volt-400: #d6ff5e;
+  --color-volt-300: #e6ff8f;
+
+  /* Team colours */
+  --color-home-500: #2e9bff;
+  --color-away-500: #ff4d4d;
+
+  --radius-card: 14px;
+
+  --animate-fade-in: fade-in 0.5s ease-out both;
+  --animate-slide-up: slide-up 0.55s cubic-bezier(0.22, 1, 0.36, 1) both;
+  --animate-pop: pop 0.35s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+  --animate-pulse-volt: pulse-volt 1.6s ease-in-out infinite;
+}
+
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slide-up {
+  from { opacity: 0; transform: translateY(18px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes pop {
+  0% { opacity: 0; transform: scale(0.6); }
+  100% { opacity: 1; transform: scale(1); }
+}
+
+@keyframes pulse-volt {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.45; }
+}
+
+html, body, #root {
+  height: 100%;
+}
+
+body {
+  font-family: var(--font-body);
+  background-color: var(--color-night-950);
+  color: #e8eef5;
+  -webkit-font-smoothing: antialiased;
+}

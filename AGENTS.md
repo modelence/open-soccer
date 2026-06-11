@@ -1,3 +1,35 @@
+## PROJECT: PitchKick — arcade browser football game
+
+A FIFA-like top-down football game played in the browser vs the CPU. Fully
+client-side, rendered on `<canvas>` with `requestAnimationFrame`. No backend
+game state yet (no Stores/queries for gameplay).
+
+### Game architecture
+- `src/client/game/engine.ts` — `PitchKickGame` class: the whole game loop,
+  physics, input handling (window keydown/keyup), PC AI, and canvas rendering.
+  Field is 1050x680 with a 56px margin (`CANVAS_W`/`CANVAS_H` exported).
+  Calls a `HudState` listener each frame to push score/time/possession to React.
+- `src/client/pages/HomePage.tsx` — hosts the canvas, scoreboard HUD, start
+  overlay, GOAL flash, and the controls legend. Instantiates the engine in a
+  `useEffect` keyed on `started`/`gameKey`.
+
+### Controls (FIFA PC style)
+- Arrows = move, E = sprint, D = shot (aims at CPU goal), S = short pass,
+  A = long pass, W = through pass. Passes currently just kick in the facing
+  direction (no teammates yet).
+
+### Gameplay model (current slice)
+- You = blue (left side, attack right). CPU = red, single chaser that carries
+  toward your goal and shoots when close. Possession = nearest player within
+  control distance gets a lime ring + dribbles the ball ahead.
+- Ball bounces off all walls except the goal mouths (no throw-ins yet).
+- 2-minute match timer counting down; goals reset to kickoff; full-time verdict.
+
+### NOT YET BUILT (future slices)
+- Teammates / a full team, so passes actually target a player.
+- Goalkeepers as distinct entities, offside, fouls, throw-ins/corners.
+- Difficulty levels, player stats, persistence of results to a Store.
+
 ## Comprehensive Project Structure Overview
 
 ### 1. PROJECT STRUCTURE
