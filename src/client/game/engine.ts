@@ -105,6 +105,16 @@ function clamp(v: number, lo: number, hi: number) {
   return Math.max(lo, Math.min(hi, v));
 }
 
+/** Distance from point p to the line segment a→b. */
+function distToSegment(p: Vec, a: Vec, b: Vec) {
+  const abx = b.x - a.x;
+  const aby = b.y - a.y;
+  const lenSq = abx * abx + aby * aby;
+  if (lenSq === 0) return dist(p, a);
+  const t = clamp(((p.x - a.x) * abx + (p.y - a.y) * aby) / lenSq, 0, 1);
+  return dist(p, { x: a.x + abx * t, y: a.y + aby * t });
+}
+
 export class PitchKickGame {
   private ctx: CanvasRenderingContext2D;
   private raf = 0;
@@ -125,6 +135,11 @@ export class PitchKickGame {
   private lastKicker: PlayerEntity | null = null;
   private kickerLock = 0;
   private cpuDecision = 0;
+  /** Protection window after winning the ball — can't be tackled. */
+  private stealProtect = 0;
+  /** The player who just lost a tackle can't immediately win the ball back. */
+  private dispossessed: PlayerEntity | null = null;
+  private dispossessedTimer = 0;
 
   private homeScore = 0;
   private awayScore = 0;
@@ -225,6 +240,9 @@ export class PitchKickGame {
     this.owner = null;
     this.lastKicker = null;
     this.kickerLock = 0;
+    this.stealProtect = 0;
+    this.dispossessed = null;
+    this.dispossessedTimer = 0;
     this.freeze = 0.9;
   }
 
@@ -327,6 +345,11 @@ export class PitchKickGame {
     if (this.kickerLock > 0) this.kickerLock -= dt;
     else this.lastKicker = null;
     if (this.cpuDecision > 0) this.cpuDecision -= dt;
+    if (this.stealProtect > 0) this.stealProtect -= dt;
+    if (this.dispossessedTimer > 0) {
+      this.dispossessedTimer -= dt;
+      if (this.dispossessedTimer <= 0) this.dispossessed = null;
+    }
     for (const p of [...this.homePlayers, ...this.awayPlayers]) {
       if (p.kickTimer > 0) p.kickTimer -= dt;
     }
@@ -357,11 +380,75 @@ export class PitchKickGame {
     this.updateControlled(dt);
     this.updateHomeTeammates(dt);
     this.updateAwayTeam(dt);
+    this.separatePlayers();
     this.resolvePossession();
     this.updateBall(dt);
     this.handleGoals();
 
     this.justPressed = [];
+  }
+
+  /**
+   * FIFA-style switch scoring (lower = better candidate).
+   *
+   * When the CPU has the ball, the best player to switch to is NOT the one
+   * radially closest to the ball — it's the one best placed to intercept
+   * the carrier's path toward OUR goal: we project an intercept point in
+   * front of the carrier (toward the home goal) and strongly prefer
+   * goal-side defenders over players level with or behind the play.
+   */
+  private switchScore(p: PlayerEntity): number {
+    const carrier = this.owner && this.owner.team === 'away' ? this.owner : null;
+
+    if (carrier) {
+      // Direction of the attack: blend "toward our goal" with the
+      // carrier's actual movement.
+      const goal = { x: 0, y: FIELD_H / 2 };
+      const gl = len(goal.x - carrier.x, goal.y - carrier.y);
+      let dirX = (goal.x - carrier.x) / gl;
+      let dirY = (goal.y - carrier.y) / gl;
+      const sp = len(carrier.vx, carrier.vy);
+      if (sp > 40) {
+        dirX = dirX * 0.5 + (carrier.vx / sp) * 0.5;
+        dirY = dirY * 0.5 + (carrier.vy / sp) * 0.5;
+        const dl = len(dirX, dirY);
+        dirX /= dl;
+        dirY /= dl;
+      }
+      const intercept = {
+        x: carrier.x + dirX * 70,
+        y: carrier.y + dirY * 70,
+      };
+
+      let score = dist(p, intercept);
+      // Goal-side (between carrier and our goal) is what defending is
+      // about — reward it; punish being behind the play.
+      if (p.x < carrier.x - 5) score -= 55;
+      else if (p.x > carrier.x + 15) score += 60;
+      return score;
+    }
+
+    // Loose ball (or our own possession): closest to where the ball is
+    // heading wins.
+    const ahead = {
+      x: clamp(this.ball.x + this.ball.vx * 0.35, 0, FIELD_W),
+      y: clamp(this.ball.y + this.ball.vy * 0.35, 0, FIELD_H),
+    };
+    return dist(p, ahead);
+  }
+
+  private bestSwitchCandidate(exclude: PlayerEntity): PlayerEntity | null {
+    let best: PlayerEntity | null = null;
+    let bestScore = Infinity;
+    for (const p of this.homePlayers) {
+      if (p === exclude) continue;
+      const s = this.switchScore(p);
+      if (s < bestScore) {
+        bestScore = s;
+        best = p;
+      }
+    }
+    return best;
   }
 
   /**
@@ -374,11 +461,12 @@ export class PitchKickGame {
       this.switchHint = this.owner;
       return;
     }
-    const candidate = this.nearestTo(this.homePlayers, this.ball, this.controlled);
-    // Only suggest a switch when the candidate is meaningfully closer.
+    const candidate = this.bestSwitchCandidate(this.controlled);
+    // Only suggest a switch when the candidate is meaningfully better
+    // positioned than the player you already control.
     if (
       candidate &&
-      dist(candidate, this.ball) + 30 < dist(this.controlled, this.ball)
+      this.switchScore(candidate) + 25 < this.switchScore(this.controlled)
     ) {
       this.switchHint = candidate;
     } else {
@@ -389,8 +477,7 @@ export class PitchKickGame {
   private handleSwitchKey() {
     if (!this.justPressed.includes('KeyQ')) return;
     const target =
-      this.switchHint ??
-      this.nearestTo(this.homePlayers, this.ball, this.controlled);
+      this.switchHint ?? this.bestSwitchCandidate(this.controlled);
     if (target) {
       this.controlled = target;
       this.switchHint = null;
@@ -430,9 +517,7 @@ export class PitchKickGame {
     const kicker = this.controlled;
 
     if (code === 'KeyD') {
-      // Shot — aim at the CPU goal mouth.
-      const ty = clamp(this.ball.y, goalTop + 24, goalBottom - 24);
-      this.kickBallToward({ x: FIELD_W, y: ty }, 660, kicker);
+      this.shootAssisted(kicker);
       return;
     }
 
@@ -440,6 +525,85 @@ export class PitchKickGame {
     const isLong = code === 'KeyA';
     const isThrough = code === 'KeyW';
     if (!isShort && !isLong && !isThrough) return;
+    this.passAssisted(kicker, { isShort, isLong, isThrough });
+  }
+
+  /**
+   * FIFA-style assisted shot. The ball always goes toward the goal you
+   * attack; the vertical arrow input picks the *zone* of the frame
+   * (up = top half, down = bottom half, neutral = anywhere), and within
+   * that zone the engine picks the placement with the clearest shooting
+   * lane — i.e. the spot furthest from any blocking player, like FIFA's
+   * assisted finishing steering shots away from the keeper/defenders.
+   */
+  private shootAssisted(kicker: PlayerEntity) {
+    let vert = 0;
+    if (this.keys.has('ArrowUp')) vert -= 1;
+    if (this.keys.has('ArrowDown')) vert += 1;
+    // No arrow held at all → fall back to the facing direction's vertical
+    // lean, so curling runs still place shots naturally.
+    const horizontalHeld =
+      this.keys.has('ArrowLeft') || this.keys.has('ArrowRight');
+    if (vert === 0 && !horizontalHeld) {
+      if (kicker.facing.y < -0.45) vert = -1;
+      else if (kicker.facing.y > 0.45) vert = 1;
+    }
+
+    const inset = 16; // keep aim inside the posts
+    const mid = (goalTop + goalBottom) / 2;
+    // Zone of the frame the input allows, and the spot the input "wants".
+    let zoneLo = goalTop + inset;
+    let zoneHi = goalBottom - inset;
+    let desiredY = mid;
+    if (vert < 0) {
+      zoneHi = mid - 8;
+      desiredY = goalTop + inset; // top corner
+    } else if (vert > 0) {
+      zoneLo = mid + 8;
+      desiredY = goalBottom - inset; // bottom corner
+    }
+
+    // Sample candidate placements across the allowed zone and score each
+    // by how clear the shooting lane is (distance of the nearest blocker
+    // to the ball→target line), with a tie-break preference for the spot
+    // the player's input asked for.
+    const blockers = [...this.awayPlayers, ...this.homePlayers].filter(
+      (p) => p !== kicker,
+    );
+    const goalX = FIELD_W - 2;
+    const zoneSpan = Math.max(zoneHi - zoneLo, 1);
+    const SAMPLES = 9;
+    let bestY = desiredY;
+    let bestScore = -Infinity;
+    for (let i = 0; i < SAMPLES; i++) {
+      const ty = zoneLo + (zoneSpan * i) / (SAMPLES - 1);
+      const target = { x: goalX, y: ty };
+      let clearance = Infinity;
+      for (const b of blockers) {
+        clearance = Math.min(
+          clearance,
+          distToSegment(b, this.ball, target) - b.r,
+        );
+      }
+      // Clearance dominates (capped so wide-open lanes stop competing),
+      // input preference breaks ties between similarly open lanes.
+      const score =
+        Math.min(clearance, 50) +
+        (1 - Math.abs(ty - desiredY) / zoneSpan) * 16;
+      if (score > bestScore) {
+        bestScore = score;
+        bestY = ty;
+      }
+    }
+
+    this.kickBallToward({ x: goalX, y: bestY }, 660, kicker);
+  }
+
+  private passAssisted(
+    kicker: PlayerEntity,
+    opts: { isShort: boolean; isLong: boolean; isThrough: boolean },
+  ) {
+    const { isShort, isLong, isThrough } = opts;
 
     const target = this.pickPassTarget(kicker, { short: isShort, long: isLong });
     if (!target) {
@@ -635,14 +799,52 @@ export class PitchKickGame {
   // ---- possession / ball ---------------------------------------------------
 
   private resolvePossession() {
+    const prev = this.owner;
+
     let best: PlayerEntity | null = null;
     let bestD = Infinity;
     for (const p of [...this.homePlayers, ...this.awayPlayers]) {
       if (this.kickerLock > 0 && p === this.lastKicker) continue;
+      // A freshly dispossessed player can't win the ball straight back.
+      if (this.dispossessed === p) continue;
       const d = dist(p, this.ball);
       if (d <= CONTROL_DIST && d < bestD) {
         bestD = d;
         best = p;
+      }
+    }
+
+    // Hysteresis: the current owner keeps the ball against challengers
+    // unless the challenger gets meaningfully closer AND the protection
+    // window from winning it has elapsed.
+    if (prev && best && best !== prev && this.dispossessed !== prev) {
+      const prevD = dist(prev, this.ball);
+      if (prevD <= CONTROL_DIST + 4) {
+        const challengerWins =
+          this.stealProtect <= 0 &&
+          (best.team === prev.team || bestD < prevD - 7);
+        if (!challengerWins) best = prev;
+      }
+    }
+
+    // Possession changed hands.
+    if (best && best !== prev) {
+      if (prev && prev.team !== best.team) {
+        // Tackle won: protect the winner and lock out the loser.
+        this.stealProtect = 0.9;
+        this.dispossessed = prev;
+        this.dispossessedTimer = 1.2;
+        // Turn the winner away from the tackled opponent so the dribble
+        // carries the ball out on the FAR side, not back into their feet.
+        const dx = best.x - prev.x;
+        const dy = best.y - prev.y;
+        const l = len(dx, dy);
+        best.facing = { x: dx / l, y: dy / l };
+        this.ball.x = best.x + (dx / l) * (best.r + this.ball.r);
+        this.ball.y = best.y + (dy / l) * (best.r + this.ball.r);
+      } else {
+        // Clean receive (pass or loose ball) — short protection.
+        this.stealProtect = 0.35;
       }
     }
 
@@ -656,13 +858,45 @@ export class PitchKickGame {
   }
 
   private dribble(owner: PlayerEntity) {
-    const ahead = owner.r + this.ball.r + 4;
+    // While protected (just won a tackle / received), keep the ball glued
+    // to the feet instead of pushed out in front where it can be poked.
+    const ahead =
+      this.stealProtect > 0
+        ? owner.r + this.ball.r - 2
+        : owner.r + this.ball.r + 4;
     const targetX = owner.x + owner.facing.x * ahead;
     const targetY = owner.y + owner.facing.y * ahead;
-    this.ball.x += (targetX - this.ball.x) * 0.3;
-    this.ball.y += (targetY - this.ball.y) * 0.3;
+    const snap = this.stealProtect > 0 ? 0.55 : 0.3;
+    this.ball.x += (targetX - this.ball.x) * snap;
+    this.ball.y += (targetY - this.ball.y) * snap;
     this.ball.vx = owner.vx;
     this.ball.vy = owner.vy;
+  }
+
+  /** Soft circle-vs-circle separation so players can't stand inside each other. */
+  private separatePlayers() {
+    const all = [...this.homePlayers, ...this.awayPlayers];
+    for (let i = 0; i < all.length; i++) {
+      for (let j = i + 1; j < all.length; j++) {
+        const a = all[i];
+        const b = all[j];
+        const dx = b.x - a.x;
+        const dy = b.y - a.y;
+        const d = Math.hypot(dx, dy);
+        const minD = a.r + b.r - 4; // slight overlap allowed for shoulder contact
+        if (d > 0 && d < minD) {
+          const push = (minD - d) / 2;
+          const nx = dx / d;
+          const ny = dy / d;
+          a.x -= nx * push;
+          a.y -= ny * push;
+          b.x += nx * push;
+          b.y += ny * push;
+          this.clampToField(a);
+          this.clampToField(b);
+        }
+      }
+    }
   }
 
   private updateBall(dt: number) {
