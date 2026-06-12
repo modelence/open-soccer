@@ -70,6 +70,7 @@ const TURN_RATE = 13;
 
 type Vec = { x: number; y: number };
 type Team = 'home' | 'away';
+type Role = 'GK' | 'DF' | 'MF' | 'ST';
 
 interface PlayerEntity {
   x: number;
@@ -88,6 +89,7 @@ interface PlayerEntity {
   hair: string;
   skin: string;
   isGK: boolean;
+  role: Role;
 }
 
 export interface HudState {
@@ -237,6 +239,7 @@ export class PitchKickGame {
       hair: HAIR_COLORS[(i + (team === 'away' ? 2 : 0)) % HAIR_COLORS.length],
       skin: SKIN_TONES[(i + (team === 'away' ? 1 : 0)) % SKIN_TONES.length],
       isGK: i === 0,
+      role: i === 0 ? 'GK' : i <= 4 ? 'DF' : i <= 8 ? 'MF' : 'ST',
     };
   }
 
@@ -781,22 +784,6 @@ export class PitchKickGame {
 
   // ---- teammates AI (home, non-controlled) --------------------------------
 
-  private formationTarget(p: PlayerEntity): Vec {
-    if (p.isGK) return this.keeperTarget(p);
-    return {
-      x: clamp(
-        p.anchor.x + (this.ball.x - FIELD_W / 2) * 0.35,
-        p.r,
-        FIELD_W - p.r,
-      ),
-      y: clamp(
-        p.anchor.y + (this.ball.y - FIELD_H / 2) * 0.25,
-        p.r,
-        FIELD_H - p.r,
-      ),
-    };
-  }
-
   /** Keeper stays on his line and tracks the ball across the goal mouth. */
   private keeperTarget(p: PlayerEntity): Vec {
     const mid = FIELD_H / 2;
@@ -886,14 +873,18 @@ export class PitchKickGame {
 
   /**
    * FIFA-style off-ball positioning, used by every player except the
-   * user-controlled one, the carrier, and the active presser/chaser:
-   * - ATTACK (my team has the ball): the shape pushes up and follows the
-   *   ball; players level with or ahead of the carrier make runs in behind;
-   *   everyone drifts away from nearby opponents to stay open for a pass.
-   * - DEFEND (opponent has it): the shape compresses toward our goal and
-   *   shifts with the ball; defenders near dangerous opponents man-mark
-   *   them goal-side (see computeMarking).
-   * - LOOSE ball: neutral ball-shifted formation shape.
+   * user-controlled one, the carrier, and the active presser/chaser.
+   *
+   * The team shape is BALL-RELATIVE, not anchor-relative: each line
+   * (DF/MF/ST) targets a depth measured from its own goal that tracks the
+   * ball, so the block moves up and down the pitch as a connected unit —
+   * no gap between the players joining the attack and the rest.
+   * Line depths are clamped so the defence never collapses onto its own
+   * goal line (floor ≈ penalty-box edge) and strikers never drop deep.
+   * - ATTACK: lines push up around the ball; players level with/ahead of
+   *   the carrier make runs in behind; everyone drifts off markers.
+   * - DEFEND: compact mid/low block + goal-side man-marking (computeMarking).
+   * - LOOSE: neutral block around the ball.
    */
   private offBallPlan(
     p: PlayerEntity,
@@ -901,34 +892,75 @@ export class PitchKickGame {
   ): { pos: Vec; speed: number } {
     if (p.isGK) return { pos: this.keeperTarget(p), speed: baseSpeed };
     const dir = p.team === 'home' ? 1 : -1;
+    const ownGoalX = p.team === 'home' ? 0 : FIELD_W;
+    /** Distance from own goal along the attacking direction (0..FIELD_W). */
+    const depth = (x: number) => (x - ownGoalX) * dir;
+    const fromDepth = (d: number) => ownGoalX + d * dir;
+    const ballD = depth(this.ball.x);
+    const W = FIELD_W;
     const owner = this.owner;
+    const phase: 'attack' | 'defend' | 'loose' = !owner
+      ? 'loose'
+      : owner.team === p.team
+        ? 'attack'
+        : 'defend';
 
-    // DEFEND
-    if (owner && owner.team !== p.team) {
+    // Per-line target depth, tracking the ball. [DF, MF, ST] per phase.
+    let lineD: number;
+    if (phase === 'defend') {
+      lineD =
+        p.role === 'DF'
+          ? clamp(ballD - 200, 170, W * 0.52) // never parked on the goal line
+          : p.role === 'MF'
+            ? clamp(ballD - 20, 340, W * 0.68)
+            : clamp(ballD + 230, W * 0.4, W * 0.75); // STs stay up as the outlet
+    } else if (phase === 'attack') {
+      lineD =
+        p.role === 'DF'
+          ? clamp(ballD - 420, 280, W * 0.58)
+          : p.role === 'MF'
+            ? clamp(ballD - 150, 450, W * 0.8)
+            : clamp(ballD + 170, 720, W - 170);
+    } else {
+      lineD =
+        p.role === 'DF'
+          ? clamp(ballD - 300, 220, W * 0.55)
+          : p.role === 'MF'
+            ? clamp(ballD - 80, 400, W * 0.74)
+            : clamp(ballD + 200, 640, W * 0.85);
+    }
+    // Keep the formation's internal stagger (full-backs/wingers slightly
+    // higher than the centre of their line).
+    const roleCenter = p.role === 'DF' ? 0.15 : p.role === 'MF' ? 0.33 : 0.52;
+    lineD += (depth(p.anchor.x) / W - roleCenter) * W * 1.6;
+
+    // Width: hold the lane from the formation, pulled toward the ball side.
+    const ySqueeze = phase === 'defend' ? 0.4 : 0.28;
+    const t = {
+      x: fromDepth(lineD),
+      y: p.anchor.y + (this.ball.y - FIELD_H / 2) * ySqueeze,
+    };
+
+    // DEFEND: man-marking overrides the zonal block.
+    if (phase === 'defend') {
       const mark = this.markAssign.get(p);
       if (mark) {
         return { pos: this.markTarget(p, mark), speed: PRESS_SPEED * 0.95 };
       }
-      return {
-        pos: this.clampTarget({
-          x: p.anchor.x + (this.ball.x - FIELD_W / 2) * 0.4 - dir * 55,
-          y: p.anchor.y + (this.ball.y - FIELD_H / 2) * 0.35,
-        }),
-        speed: baseSpeed,
-      };
+      return { pos: this.clampTarget(t), speed: baseSpeed };
     }
 
     // ATTACK
-    if (owner && owner.team === p.team) {
+    if (phase === 'attack' && owner) {
       let speed = baseSpeed;
-      const t = {
-        x: p.anchor.x + (this.ball.x - FIELD_W / 2) * 0.45 + dir * 80,
-        y: p.anchor.y + (this.ball.y - FIELD_H / 2) * 0.2,
-      };
       // Run in behind when level with / ahead of the carrier and near
       // the play — this is what creates through-ball targets.
-      if ((p.x - owner.x) * dir > -50 && dist(p, owner) < 560) {
-        t.x = clamp(owner.x + dir * 240, 150, FIELD_W - 150);
+      if (
+        p.role !== 'DF' &&
+        (p.x - owner.x) * dir > -50 &&
+        dist(p, owner) < 560
+      ) {
+        t.x = clamp(owner.x + dir * 260, 150, FIELD_W - 150);
         speed = RUN_SPEED;
       }
       // Get open: drift away from the nearest opponent near the spot so
@@ -948,7 +980,7 @@ export class PitchKickGame {
     }
 
     // LOOSE
-    return { pos: this.formationTarget(p), speed: baseSpeed };
+    return { pos: this.clampTarget(t), speed: baseSpeed };
   }
 
   private updateHomeTeammates(dt: number) {
@@ -992,7 +1024,10 @@ export class PitchKickGame {
         continue;
       }
       const plan = this.offBallPlan(p, TEAMMATE_SPEED);
-      this.moveToward(p, plan.pos, plan.speed, dt);
+      // Jog into position, but RUN when badly out of position.
+      const sp =
+        dist(p, plan.pos) > 240 ? Math.max(plan.speed, RUN_SPEED) : plan.speed;
+      this.moveToward(p, plan.pos, sp, dt);
     }
   }
 
@@ -1045,7 +1080,11 @@ export class PitchKickGame {
         this.moveToward(p, t, AWAY_CHASE_SPEED, dt);
       } else {
         const plan = this.offBallPlan(p, AWAY_FORMATION_SPEED);
-        this.moveToward(p, plan.pos, plan.speed, dt);
+        const sp =
+          dist(p, plan.pos) > 240
+            ? Math.max(plan.speed, RUN_SPEED)
+            : plan.speed;
+        this.moveToward(p, plan.pos, sp, dt);
       }
     }
   }

@@ -111,23 +111,34 @@ game state yet (no Stores/queries for gameplay).
 - OFF-BALL INTELLIGENCE (`offBallPlan`, both teams, user-requested "players
   should attack/defend/get open like FIFA"; applies to everyone except the
   controlled player, the carrier, the away chaser and the home presser):
-  - ATTACK phase (team owns ball): shape pushes up (anchor + ballShift*0.45
-    + 80 toward opponent goal); players level/ahead of carrier (within
-    560px) run in behind to x = carrier.x + 240 (clamped 150..W-150) at
-    RUN_SPEED=200 — this feeds through balls; final spot drifts away from
-    any opponent within 95px ("get open" for passes).
-  - DEFEND phase: compact shape (anchor + ballShift*0.4x/0.35y, -55 toward
-    own goal) + man-marking: `computeMarking()` every 0.35s (markTimer,
-    markAssign Map defender->threat, cleared on kickoff) greedily assigns
-    threats (non-GK attackers within 62% of pitch from defended goal,
-    sorted by danger) to nearest free defender within 320px; excluded:
-    GKs, this.controlled. `markTarget` = 40px off the attacker, direction
-    75% toward own goal + 25% toward ball. Markers move at 190.
+  - v2 SHAPE MODEL (after user said v1 was too static + defence collapsed
+    to the goal line): BALL-RELATIVE line depths, not anchor shifts.
+    Players have `role` ('GK'|'DF'|'MF'|'ST' from formation index; also
+    `isGK`). Depth = distance from OWN goal along attack dir. Per phase:
+    - defend: DF clamp(ballD-200, 170, W*.52) — floor ≈ box edge, never
+      goal line; MF clamp(ballD-20, 340, W*.68); ST clamp(ballD+230,
+      W*.4, W*.75) stay up as outlet.
+    - attack: DF clamp(ballD-420, 280, W*.58); MF clamp(ballD-150, 450,
+      W*.8); ST clamp(ballD+170, 720, W-170).
+    - loose: DF -300/220/.55, MF -80/400/.74, ST +200/640/.85.
+    Plus formation stagger (anchorDepthFrac - roleCenter[.15/.33/.52])
+    * W*1.6; y = anchor.y + ballShift * (defend .4 : .28). `formationTarget`
+    was REMOVED (only keeperTarget remains). Catch-up: callers boost to
+    RUN_SPEED when >240px from target spot.
+  - ATTACK extras: non-DF players level/ahead of carrier (within 560px)
+    run in behind to x = carrier.x + 260 at RUN_SPEED=200 (through-ball
+    targets); final spot drifts away from any opponent within 95px.
+  - DEFEND extras — man-marking overrides the zonal spot:
+    `computeMarking()` every 0.35s (markTimer, markAssign Map
+    defender->threat, cleared on kickoff) greedily assigns threats
+    (non-GK attackers within 62% of pitch from defended goal, sorted by
+    danger) to nearest free defender within 320px; excluded: GKs,
+    this.controlled. `markTarget` = 40px off the attacker, direction 75%
+    toward own goal + 25% toward ball. Markers move at 190.
   - HOME PRESSER: nearest non-controlled non-GK home player presses the
     CPU carrier (or a loose ball last kicked by the CPU — never chases
     home-kicked balls so teammates don't steal your passes) at
     PRESS_SPEED=200. Without this the home team never defended.
-  - LOOSE ball: neutral formationTarget shape.
 - Pass powers rescaled for the big pitch: short clamp(d*1.85,300,540),
   long clamp(d*1.5,460,780) cap 900, through clamp(d*1.6,400,640) lead 150,
   short pref ~240, through pref ~380. Pitch markings rescaled: 18 mow
