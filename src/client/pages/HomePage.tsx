@@ -10,10 +10,11 @@ import {
 const CONTROLS: { keys: string; label: string }[] = [
   { keys: '← ↑ ↓ →', label: 'Move' },
   { keys: 'E', label: 'Sprint' },
-  { keys: 'D', label: 'Shot' },
+  { keys: 'D', label: 'Shot / Tackle' },
   { keys: 'S', label: 'Short pass' },
   { keys: 'A', label: 'Long pass' },
   { keys: 'W', label: 'Through pass' },
+  { keys: 'C', label: 'Contain (hold)' },
   { keys: 'Q', label: 'Switch player' },
 ];
 
@@ -141,7 +142,7 @@ export default function HomePage() {
       </div>
 
       {/* Controls legend */}
-      <div className="w-full max-w-5xl mt-5 grid grid-cols-2 sm:grid-cols-4 md:grid-cols-7 gap-2 animate-fade-in">
+      <div className="w-full max-w-5xl mt-5 grid grid-cols-2 sm:grid-cols-4 md:grid-cols-8 gap-2 animate-fade-in">
         {CONTROLS.map((c) => (
           <div
             key={c.label}
@@ -159,9 +160,11 @@ export default function HomePage() {
 
       <p className="mt-5 text-xs text-night-700 font-body text-center max-w-xl">
         Tip: hold a pass/shot key to charge the power gauge, release to kick —
-        a quick tap plays it soft. Aim with the arrows you're holding. Off the
-        ball, press <span className="text-volt-400">Q</span> to jump to the
-        hinted ▽ player.
+        a quick tap plays it soft. Defending: tap{' '}
+        <span className="text-volt-400">D</span> for a standing tackle, hold{' '}
+        <span className="text-volt-400">C</span> to contain and auto-poke, or
+        just stay touch-tight — sustained contact wins the ball. Press{' '}
+        <span className="text-volt-400">Q</span> to jump to the hinted ▽ player.
       </p>
     </div>
   );

@@ -193,6 +193,29 @@ game state yet (no Stores/queries for gameplay).
   - `separatePlayers()`: soft circle collision each frame (minD = sum of
     radii - 4) so opponents can't stand inside the carrier.
   - All timers reset on kickoff.
+- DEFENDING CONTROLS (FIFA-style, added after user noted tackles felt
+  passive-only):
+  - `pokeTackle(tackler, reach)`: shared steal primitive — if an opposing
+    non-GK carrier exists, stealProtect elapsed, tackler not `dispossessed`,
+    and ball within reach, the ball is placed 6px past the tackler on the
+    far side from the carrier (resolvePossession then awards it via the
+    normal tackle-won path: 0.9s protect, 1.2s dispossess lockout).
+  - D with NO ball = standing tackle: `tackleTimer=0.22s` lunge at
+    TACKLE_LUNGE_SPEED=310 toward ball+vel*0.1 (`tackleDir`), poking with
+    reach CONTROL_DIST+18 each frame; `tackleCooldown=0.8s` commit (whiff =
+    beaten). D WITH ball still charges a shot (charge starts only if owns).
+  - C (hold) = contain: auto-jockeys to a spot 30px goal-side of the away
+    carrier at JOCKEY_SPEED=180 (E sprint → SPRINT*0.94), auto-pokes at
+    reach CONTROL_DIST+8 (0.5s cooldown). With loose ball, C hunts the ball.
+    KeyC added to MOVE_KEYS (hold key, no justPressed).
+  - Auto jostle (`updateJostle`, runs before resolvePossession, both teams):
+    nearest opposing non-GK in body contact with the carrier (centre dist <
+    r+r+9) accumulates `jostle` += dt (decays 2.5x when no contact /
+    protected); at 0.5s the challenger pokes the ball loose automatically.
+    `jostle` reset on possession change, kickoff and successful pokes.
+  - FIFA reference: tackles are manual buttons; contain auto-pokes; physical
+    seal-outs from running into the dribbler are automatic; C = contain on
+    PC keyboard.
 - Ball bounces off all walls except goal mouths (no throw-ins yet).
 - 2-minute timer; goals reset to kickoff (conceding team kicks off);
   full-time verdict freezes play.

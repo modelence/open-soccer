@@ -61,6 +61,10 @@ const AWAY_FORMATION_SPEED = 140;
 const RUN_SPEED = 200;
 /** Closing down the carrier / tracking a marked attacker. */
 const PRESS_SPEED = 200;
+/** Contain (hold C): jockey speed while shadowing the carrier. */
+const JOCKEY_SPEED = 180;
+/** Burst speed of the standing-tackle lunge (D without the ball). */
+const TACKLE_LUNGE_SPEED = 310;
 const CONTROL_DIST = PLAYER_R + BALL_R + 11;
 /** Ball rolling friction (exponential decay per second). A kick at power v
  *  rolls v/BALL_DECAY px total — pass powers MUST account for this. */
@@ -117,6 +121,7 @@ const MOVE_KEYS = new Set([
   'ArrowLeft',
   'ArrowRight',
   'KeyE',
+  'KeyC',
   'Space',
 ]);
 
@@ -208,6 +213,12 @@ export class PitchKickGame {
   /** The player who just lost a tackle can't immediately win the ball back. */
   private dispossessed: PlayerEntity | null = null;
   private dispossessedTimer = 0;
+  /** Standing tackle (D off the ball): active lunge window + commit cooldown. */
+  private tackleTimer = 0;
+  private tackleCooldown = 0;
+  private tackleDir: Vec = { x: 1, y: 0 };
+  /** Accumulated body-contact time on the carrier (auto jostle steal). */
+  private jostle = 0;
 
   private homeScore = 0;
   private awayScore = 0;
@@ -324,6 +335,9 @@ export class PitchKickGame {
     this.markTimer = 0;
     this.chargeKey = null;
     this.chargeTime = 0;
+    this.tackleTimer = 0;
+    this.tackleCooldown = 0;
+    this.jostle = 0;
     this.freeze = 0.9;
   }
 
@@ -427,6 +441,7 @@ export class PitchKickGame {
     else this.lastKicker = null;
     if (this.cpuDecision > 0) this.cpuDecision -= dt;
     if (this.stealProtect > 0) this.stealProtect -= dt;
+    if (this.tackleCooldown > 0) this.tackleCooldown -= dt;
     if (this.dispossessedTimer > 0) {
       this.dispossessedTimer -= dt;
       if (this.dispossessedTimer <= 0) this.dispossessed = null;
@@ -469,6 +484,7 @@ export class PitchKickGame {
     this.updateHomeTeammates(dt);
     this.updateAwayTeam(dt);
     this.separatePlayers();
+    this.updateJostle(dt);
     this.resolvePossession();
     this.updateBall(dt);
     this.handleGoals();
@@ -586,25 +602,81 @@ export class PitchKickGame {
 
   private updateControlled(dt: number) {
     const p = this.controlled;
-    let dx = 0;
-    let dy = 0;
-    if (this.keys.has('ArrowUp')) dy -= 1;
-    if (this.keys.has('ArrowDown')) dy += 1;
-    if (this.keys.has('ArrowLeft')) dx -= 1;
-    if (this.keys.has('ArrowRight')) dx += 1;
-
-    const speed = this.keys.has('KeyE') ? SPRINT_SPEED : WALK_SPEED;
-
-    let tvx = 0;
-    let tvy = 0;
-    if (dx !== 0 || dy !== 0) {
-      const l = len(dx, dy);
-      tvx = (dx / l) * speed;
-      tvy = (dy / l) * speed;
-    }
-    this.steer(p, tvx, tvy, dt);
-
     const owns = this.owner === p;
+    const carrier =
+      this.owner && this.owner.team === 'away' ? this.owner : null;
+
+    // D without the ball = standing tackle (FIFA: a committed lunge at
+    // the ball — winning it cleanly if it's in reach, leaving you beaten
+    // for a moment if you whiff).
+    if (
+      !owns &&
+      this.tackleCooldown <= 0 &&
+      this.justPressed.includes('KeyD')
+    ) {
+      const bx = this.ball.x + this.ball.vx * 0.1 - p.x;
+      const by = this.ball.y + this.ball.vy * 0.1 - p.y;
+      const l = len(bx, by);
+      this.tackleDir = { x: bx / l, y: by / l };
+      this.tackleTimer = 0.22;
+      this.tackleCooldown = 0.8;
+      p.kickTimer = Math.max(p.kickTimer, 0.22);
+    }
+
+    const containing = this.keys.has('KeyC') && !owns;
+
+    if (this.tackleTimer > 0) {
+      // Mid-lunge: burst toward the ball and poke it loose on contact.
+      this.tackleTimer -= dt;
+      this.steer(
+        p,
+        this.tackleDir.x * TACKLE_LUNGE_SPEED,
+        this.tackleDir.y * TACKLE_LUNGE_SPEED,
+        dt,
+      );
+      this.pokeTackle(p, CONTROL_DIST + 18);
+    } else if (containing && carrier) {
+      // FIFA contain (hold C): auto-jockey goal-side of the carrier and
+      // automatically poke the ball when it comes into reach.
+      const gx = -carrier.x;
+      const gy = FIELD_H / 2 - carrier.y;
+      const gl = len(gx, gy);
+      const spot = {
+        x: carrier.x + (gx / gl) * 30,
+        y: carrier.y + (gy / gl) * 30,
+      };
+      const speed = this.keys.has('KeyE')
+        ? SPRINT_SPEED * 0.94
+        : JOCKEY_SPEED;
+      this.moveToward(p, spot, speed, dt);
+      if (this.tackleCooldown <= 0 && this.pokeTackle(p, CONTROL_DIST + 8)) {
+        this.tackleCooldown = 0.5;
+      }
+    } else if (containing) {
+      // Contain with a loose ball — just hunt it down.
+      const speed = this.keys.has('KeyE')
+        ? SPRINT_SPEED * 0.94
+        : JOCKEY_SPEED;
+      this.moveToward(p, { x: this.ball.x, y: this.ball.y }, speed, dt);
+    } else {
+      let dx = 0;
+      let dy = 0;
+      if (this.keys.has('ArrowUp')) dy -= 1;
+      if (this.keys.has('ArrowDown')) dy += 1;
+      if (this.keys.has('ArrowLeft')) dx -= 1;
+      if (this.keys.has('ArrowRight')) dx += 1;
+
+      const speed = this.keys.has('KeyE') ? SPRINT_SPEED : WALK_SPEED;
+
+      let tvx = 0;
+      let tvy = 0;
+      if (dx !== 0 || dy !== 0) {
+        const l = len(dx, dy);
+        tvx = (dx / l) * speed;
+        tvy = (dy / l) * speed;
+      }
+      this.steer(p, tvx, tvy, dt);
+    }
 
     // FIFA-style kick charging: pressing a kick key starts the power
     // gauge; releasing it executes the kick with the charged power.
@@ -1267,6 +1339,64 @@ export class PitchKickGame {
 
   // ---- possession / ball ---------------------------------------------------
 
+  /**
+   * Poke the ball off an opposing carrier if it's within reach. The ball is
+   * knocked to the tackler's far side (away from the carrier), and normal
+   * possession resolution then awards it — triggering the tackle-won
+   * protection / dispossession lockout. Returns true if the poke connected.
+   */
+  private pokeTackle(tackler: PlayerEntity, reach: number): boolean {
+    const carrier = this.owner;
+    if (!carrier || carrier.team === tackler.team || carrier.isGK)
+      return false;
+    if (this.stealProtect > 0 || this.dispossessed === tackler) return false;
+    if (dist(tackler, this.ball) > reach) return false;
+
+    const dx = tackler.x - carrier.x;
+    const dy = tackler.y - carrier.y;
+    const l = len(dx, dy);
+    this.ball.x = tackler.x + (dx / l) * 6;
+    this.ball.y = tackler.y + (dy / l) * 6;
+    this.ball.vx = tackler.vx;
+    this.ball.vy = tackler.vy;
+    tackler.kickTimer = Math.max(tackler.kickTimer, 0.18);
+    this.jostle = 0;
+    return true;
+  }
+
+  /**
+   * FIFA-style physical jostling: sustained body contact with the carrier
+   * wins the ball automatically — no button needed. Running straight into
+   * the man on the ball and staying touch-tight dislodges it after a beat.
+   * Symmetric: CPU defenders muscle you off the ball the same way.
+   */
+  private updateJostle(dt: number) {
+    const o = this.owner;
+    if (!o || o.isGK) {
+      this.jostle = 0;
+      return;
+    }
+    const opps = o.team === 'home' ? this.awayPlayers : this.homePlayers;
+    let challenger: PlayerEntity | null = null;
+    let bestD = Infinity;
+    for (const q of opps) {
+      if (q.isGK || q === this.dispossessed) continue;
+      const d = dist(q, o);
+      if (d < o.r + q.r + 9 && d < bestD) {
+        bestD = d;
+        challenger = q;
+      }
+    }
+    if (!challenger || this.stealProtect > 0) {
+      this.jostle = Math.max(0, this.jostle - dt * 2.5);
+      return;
+    }
+    this.jostle += dt;
+    if (this.jostle < 0.5) return;
+    // Contact sustained long enough — the challenger muscles the ball away.
+    this.pokeTackle(challenger, Infinity);
+  }
+
   private resolvePossession() {
     const prev = this.owner;
 
@@ -1298,6 +1428,7 @@ export class PitchKickGame {
 
     // Possession changed hands.
     if (best && best !== prev) {
+      this.jostle = 0;
       if (prev && prev.team !== best.team) {
         // Tackle won: protect the winner and lock out the loser.
         this.stealProtect = 0.9;
