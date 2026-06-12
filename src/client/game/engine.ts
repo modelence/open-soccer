@@ -1,13 +1,38 @@
 // PitchKick — arcade football engine (4v4 vs CPU).
 // Pure canvas + requestAnimationFrame. No React inside the hot loop.
-// Players are procedurally drawn top-down humanoids (Sensible-Soccer style)
-// with a run cycle and kick pose, rotating freely to their facing angle.
+// Simulation is flat 2D; rendering uses a pseudo-3D TV broadcast camera
+// (perspective trapezoid pitch, upright animated player sprites scaled by
+// depth) — 16-bit FIFA / ISS style.
 
 export const FIELD_W = 1050;
 export const FIELD_H = 680;
 export const MARGIN = 56;
 export const CANVAS_W = FIELD_W + MARGIN * 2;
-export const CANVAS_H = FIELD_H + MARGIN * 2;
+export const CANVAS_H = 700;
+
+// ---- TV broadcast projection ----------------------------------------------
+// The simulation stays flat 2D (x = goal-to-goal, y = depth between the
+// touchlines). The renderer projects it like a TV camera: the far touchline
+// (y=0) is drawn smaller and higher, the near touchline (y=FIELD_H) bigger
+// and lower, and everything scales with depth.
+const S_FAR = 0.56; // scale at the far touchline
+const S_NEAR = 1.0; // scale at the near touchline
+const PITCH_TOP = 116; // screen y of the far touchline
+const PITCH_DRAW_H = 510; // screen height of the pitch
+const AVG_S = (S_FAR + S_NEAR) / 2;
+
+/** Project field coordinates to screen coordinates. */
+function proj(x: number, y: number): { x: number; y: number; s: number } {
+  const t = clamp(y / FIELD_H, -0.2, 1.2);
+  const s = S_FAR + (S_NEAR - S_FAR) * t;
+  // Integral of the scale function → vertical spacing matches foreshortening.
+  const v = (S_FAR * t + 0.5 * (S_NEAR - S_FAR) * t * t) / AVG_S;
+  return {
+    x: CANVAS_W / 2 + (x - FIELD_W / 2) * s,
+    y: PITCH_TOP + PITCH_DRAW_H * v,
+    s,
+  };
+}
 
 const GOAL_HEIGHT = 200;
 const GOAL_DEPTH = 38;
@@ -953,215 +978,478 @@ export class PitchKickGame {
     m.y = Math.max(m.r, Math.min(FIELD_H - m.r, m.y));
   }
 
-  // ---- render -------------------------------------------------------------
+  // ---- render (TV broadcast pseudo-3D) ------------------------------------
 
   private render() {
     const ctx = this.ctx;
     ctx.clearRect(0, 0, CANVAS_W, CANVAS_H);
 
-    ctx.fillStyle = '#070b10';
+    // Stadium backdrop: dark stands above the far touchline.
+    const sky = ctx.createLinearGradient(0, 0, 0, PITCH_TOP + 20);
+    sky.addColorStop(0, '#05080c');
+    sky.addColorStop(1, '#0d1420');
+    ctx.fillStyle = sky;
     ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
-
-    ctx.save();
-    ctx.translate(MARGIN, MARGIN);
+    this.drawCrowd(ctx);
 
     this.drawPitch(ctx);
-    this.drawGoals(ctx);
+    this.drawGoalBack(ctx, 'left');
+    this.drawGoalBack(ctx, 'right');
 
-    // Ball shadow + ball.
-    this.drawShadow(ctx, this.ball.x, this.ball.y, this.ball.r);
-    ctx.fillStyle = '#ffffff';
-    ctx.beginPath();
-    ctx.arc(this.ball.x, this.ball.y, this.ball.r, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.strokeStyle = 'rgba(0,0,0,0.35)';
-    ctx.lineWidth = 1.5;
-    ctx.stroke();
-    // Simple panel detail so the roll reads.
-    ctx.strokeStyle = 'rgba(0,0,0,0.2)';
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.arc(this.ball.x, this.ball.y, this.ball.r * 0.5, 0, Math.PI * 2);
-    ctx.stroke();
-
-    // Sort by y so lower players overlap upper ones naturally.
-    const everyone = [...this.awayPlayers, ...this.homePlayers].sort(
-      (a, b) => a.y - b.y,
-    );
-    for (const p of everyone) {
-      this.drawHumanoid(ctx, p, p.team === 'home' ? HOME_KIT : AWAY_KIT);
+    // Depth-sort all drawables (players + ball) so near covers far.
+    type Drawable = { depth: number; draw: () => void };
+    const items: Drawable[] = [];
+    for (const p of [...this.awayPlayers, ...this.homePlayers]) {
+      items.push({
+        depth: p.y,
+        draw: () => this.drawHumanoid(ctx, p, p.team === 'home' ? HOME_KIT : AWAY_KIT),
+      });
     }
+    items.push({ depth: this.ball.y, draw: () => this.drawBall(ctx) });
+    items.sort((a, b) => a.depth - b.depth);
+    for (const it of items) it.draw();
 
-    ctx.restore();
+    this.drawGoalFront(ctx, 'left');
+    this.drawGoalFront(ctx, 'right');
+  }
+
+  /** Flickering crowd dots in the stands behind the far touchline. */
+  private drawCrowd(ctx: CanvasRenderingContext2D) {
+    const top = 18;
+    const bottom = PITCH_TOP - 14;
+    ctx.fillStyle = '#101a28';
+    ctx.fillRect(0, top, CANVAS_W, bottom - top);
+    // Deterministic pseudo-random dots (no per-frame flicker).
+    for (let i = 0; i < 420; i++) {
+      const n = Math.sin(i * 127.1) * 43758.5453;
+      const fx = n - Math.floor(n);
+      const n2 = Math.sin(i * 311.7) * 12543.123;
+      const fy = n2 - Math.floor(n2);
+      const x = fx * CANVAS_W;
+      const y = top + 6 + fy * (bottom - top - 12);
+      const shade = 0.10 + ((i * 37) % 23) / 23 * 0.22;
+      ctx.fillStyle = `rgba(180,200,230,${shade.toFixed(3)})`;
+      ctx.fillRect(x, y, 2, 2);
+    }
+    // Hoarding strip between crowd and pitch.
+    ctx.fillStyle = '#0a0f16';
+    ctx.fillRect(0, bottom, CANVAS_W, PITCH_TOP - bottom);
+    ctx.fillStyle = 'rgba(198,255,46,0.55)';
+    ctx.font = '700 11px Oswald, sans-serif';
+    ctx.textAlign = 'center';
+    for (let x = 80; x < CANVAS_W; x += 220) {
+      ctx.fillText('P I T C H K I C K', x, bottom + (PITCH_TOP - bottom) / 2 + 4);
+    }
+  }
+
+  /** Trace a polygon of projected field points. */
+  private projPath(ctx: CanvasRenderingContext2D, pts: Vec[], close = true) {
+    ctx.beginPath();
+    pts.forEach((pt, i) => {
+      const q = proj(pt.x, pt.y);
+      if (i === 0) ctx.moveTo(q.x, q.y);
+      else ctx.lineTo(q.x, q.y);
+    });
+    if (close) ctx.closePath();
   }
 
   private drawPitch(ctx: CanvasRenderingContext2D) {
+    // Grass apron slightly beyond the lines.
+    this.projPath(ctx, [
+      { x: -MARGIN, y: -26 },
+      { x: FIELD_W + MARGIN, y: -26 },
+      { x: FIELD_W + MARGIN, y: FIELD_H + 34 },
+      { x: -MARGIN, y: FIELD_H + 34 },
+    ]);
+    ctx.fillStyle = '#1f6e3a';
+    ctx.fill();
+
+    // Mow stripes (vertical bands converging toward the far line).
     const stripes = 12;
     const sw = FIELD_W / stripes;
     for (let i = 0; i < stripes; i++) {
+      this.projPath(ctx, [
+        { x: i * sw, y: 0 },
+        { x: (i + 1) * sw, y: 0 },
+        { x: (i + 1) * sw, y: FIELD_H },
+        { x: i * sw, y: FIELD_H },
+      ]);
       ctx.fillStyle = i % 2 === 0 ? '#258044' : '#22783f';
-      ctx.fillRect(i * sw, 0, sw, FIELD_H);
+      ctx.fill();
     }
 
-    ctx.strokeStyle = 'rgba(255,255,255,0.75)';
-    ctx.lineWidth = 3;
-    ctx.strokeRect(0, 0, FIELD_W, FIELD_H);
+    ctx.strokeStyle = 'rgba(255,255,255,0.78)';
+    ctx.lineWidth = 2.5;
 
-    ctx.beginPath();
-    ctx.moveTo(FIELD_W / 2, 0);
-    ctx.lineTo(FIELD_W / 2, FIELD_H);
+    // Touchlines + goal lines.
+    this.projPath(ctx, [
+      { x: 0, y: 0 },
+      { x: FIELD_W, y: 0 },
+      { x: FIELD_W, y: FIELD_H },
+      { x: 0, y: FIELD_H },
+    ]);
     ctx.stroke();
 
-    ctx.beginPath();
-    ctx.arc(FIELD_W / 2, FIELD_H / 2, 80, 0, Math.PI * 2);
+    // Halfway line.
+    this.projPath(ctx, [
+      { x: FIELD_W / 2, y: 0 },
+      { x: FIELD_W / 2, y: FIELD_H },
+    ], false);
     ctx.stroke();
+
+    // Centre circle (projected → ellipse-ish, sampled).
+    const circle: Vec[] = [];
+    for (let i = 0; i <= 40; i++) {
+      const a = (i / 40) * Math.PI * 2;
+      circle.push({
+        x: FIELD_W / 2 + Math.cos(a) * 80,
+        y: FIELD_H / 2 + Math.sin(a) * 80,
+      });
+    }
+    this.projPath(ctx, circle, false);
+    ctx.stroke();
+    const spot = proj(FIELD_W / 2, FIELD_H / 2);
     ctx.fillStyle = 'rgba(255,255,255,0.85)';
     ctx.beginPath();
-    ctx.arc(FIELD_W / 2, FIELD_H / 2, 4, 0, Math.PI * 2);
+    ctx.arc(spot.x, spot.y, 3 * spot.s, 0, Math.PI * 2);
     ctx.fill();
 
+    // Penalty boxes + six-yard boxes.
     const boxH = 320;
     const boxW = 150;
     const sixH = 160;
     const sixW = 60;
     const by = (FIELD_H - boxH) / 2;
     const sy = (FIELD_H - sixH) / 2;
-    ctx.strokeRect(0, by, boxW, boxH);
-    ctx.strokeRect(FIELD_W - boxW, by, boxW, boxH);
-    ctx.strokeRect(0, sy, sixW, sixH);
-    ctx.strokeRect(FIELD_W - sixW, sy, sixW, sixH);
+    for (const left of [true, false]) {
+      this.projPath(ctx, [
+        { x: left ? 0 : FIELD_W, y: by },
+        { x: left ? boxW : FIELD_W - boxW, y: by },
+        { x: left ? boxW : FIELD_W - boxW, y: by + boxH },
+        { x: left ? 0 : FIELD_W, y: by + boxH },
+      ], false);
+      ctx.stroke();
+    }
+    for (const left of [true, false]) {
+      this.projPath(ctx, [
+        { x: left ? 0 : FIELD_W, y: sy },
+        { x: left ? sixW : FIELD_W - sixW, y: sy },
+        { x: left ? sixW : FIELD_W - sixW, y: sy + sixH },
+        { x: left ? 0 : FIELD_W, y: sy + sixH },
+      ], false);
+      ctx.stroke();
+    }
   }
 
-  private drawGoals(ctx: CanvasRenderingContext2D) {
-    ctx.strokeStyle = 'rgba(255,255,255,0.9)';
-    ctx.lineWidth = 4;
-    ctx.strokeRect(-GOAL_DEPTH, goalTop, GOAL_DEPTH, goalBottom - goalTop);
-    ctx.strokeRect(FIELD_W, goalTop, GOAL_DEPTH, goalBottom - goalTop);
+  // Goal frame: posts stand upright on screen; the mouth spans depth
+  // (goalTop..goalBottom). Net + back structure drawn behind players,
+  // front posts + crossbar drawn in front.
+  private goalGeom(side: 'left' | 'right') {
+    const gx = side === 'left' ? 0 : FIELD_W;
+    const backX = side === 'left' ? -GOAL_DEPTH : FIELD_W + GOAL_DEPTH;
+    const far = proj(gx, goalTop);
+    const near = proj(gx, goalBottom);
+    const backFar = proj(backX, goalTop + 10);
+    const backNear = proj(backX, goalBottom - 10);
+    const postH = (s: number) => 58 * s;
+    return { far, near, backFar, backNear, postH };
+  }
 
-    ctx.strokeStyle = 'rgba(255,255,255,0.18)';
+  private drawGoalBack(ctx: CanvasRenderingContext2D, side: 'left' | 'right') {
+    const { far, near, backFar, backNear, postH } = this.goalGeom(side);
+
+    // Net: back panel + side panels, simple mesh.
+    ctx.strokeStyle = 'rgba(255,255,255,0.28)';
     ctx.lineWidth = 1;
-    for (let gx = -GOAL_DEPTH + 6; gx < 0; gx += 8) {
-      ctx.beginPath();
-      ctx.moveTo(gx, goalTop);
-      ctx.lineTo(gx, goalBottom);
-      ctx.stroke();
-    }
-    for (let gx = FIELD_W + 6; gx < FIELD_W + GOAL_DEPTH; gx += 8) {
-      ctx.beginPath();
-      ctx.moveTo(gx, goalTop);
-      ctx.lineTo(gx, goalBottom);
-      ctx.stroke();
-    }
-  }
 
-  private drawShadow(
-    ctx: CanvasRenderingContext2D,
-    x: number,
-    y: number,
-    r: number,
-  ) {
-    ctx.fillStyle = 'rgba(0,0,0,0.25)';
+    const meshSteps = 5;
+    // Back panel verticals.
+    for (let i = 0; i <= meshSteps; i++) {
+      const t = i / meshSteps;
+      const bx = backFar.x + (backNear.x - backFar.x) * t;
+      const by = backFar.y + (backNear.y - backFar.y) * t;
+      const bh = postH(backFar.s + (backNear.s - backFar.s) * t) * 0.82;
+      ctx.beginPath();
+      ctx.moveTo(bx, by);
+      ctx.lineTo(bx, by - bh);
+      ctx.stroke();
+    }
+    // Back panel horizontals.
+    for (let i = 0; i <= 4; i++) {
+      const t = i / 4;
+      ctx.beginPath();
+      ctx.moveTo(backFar.x, backFar.y - postH(backFar.s) * 0.82 * t);
+      ctx.lineTo(backNear.x, backNear.y - postH(backNear.s) * 0.82 * t);
+      ctx.stroke();
+    }
+    // Side panels (top diagonals from posts to back).
     ctx.beginPath();
-    ctx.ellipse(x + 3, y + 5, r, r * 0.6, 0, 0, Math.PI * 2);
-    ctx.fill();
+    ctx.moveTo(far.x, far.y - postH(far.s));
+    ctx.lineTo(backFar.x, backFar.y - postH(backFar.s) * 0.82);
+    ctx.moveTo(near.x, near.y - postH(near.s));
+    ctx.lineTo(backNear.x, backNear.y - postH(backNear.s) * 0.82);
+    ctx.moveTo(far.x, far.y);
+    ctx.lineTo(backFar.x, backFar.y);
+    ctx.moveTo(near.x, near.y);
+    ctx.lineTo(backNear.x, backNear.y);
+    ctx.stroke();
   }
 
-  // ---- humanoid sprite ----------------------------------------------------
+  private drawGoalFront(ctx: CanvasRenderingContext2D, side: 'left' | 'right') {
+    const { far, near, postH } = this.goalGeom(side);
+    ctx.strokeStyle = '#f2f5f8';
+    ctx.lineCap = 'round';
+
+    // Far post (thinner), near post (thicker), crossbar.
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(far.x, far.y);
+    ctx.lineTo(far.x, far.y - postH(far.s));
+    ctx.stroke();
+
+    ctx.lineWidth = 4.5;
+    ctx.beginPath();
+    ctx.moveTo(near.x, near.y);
+    ctx.lineTo(near.x, near.y - postH(near.s));
+    ctx.stroke();
+
+    ctx.lineWidth = 3.5;
+    ctx.beginPath();
+    ctx.moveTo(far.x, far.y - postH(far.s));
+    ctx.lineTo(near.x, near.y - postH(near.s));
+    ctx.stroke();
+    ctx.lineCap = 'butt';
+  }
+
+  private drawBall(ctx: CanvasRenderingContext2D) {
+    const q = proj(this.ball.x, this.ball.y);
+    const r = this.ball.r * q.s * 0.95;
+
+    // Shadow.
+    ctx.fillStyle = 'rgba(0,0,0,0.3)';
+    ctx.beginPath();
+    ctx.ellipse(q.x + 2, q.y + 1.5, r * 1.05, r * 0.4, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Ball sits slightly above its ground point.
+    const by = q.y - r * 0.7;
+    const grad = ctx.createRadialGradient(q.x - r * 0.35, by - r * 0.35, r * 0.2, q.x, by, r);
+    grad.addColorStop(0, '#ffffff');
+    grad.addColorStop(1, '#c9ced6');
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.arc(q.x, by, r, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(0,0,0,0.35)';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+
+    // Rolling panel hint.
+    const roll = (this.ball.x + this.ball.y) * 0.12;
+    ctx.strokeStyle = 'rgba(0,0,0,0.22)';
+    ctx.beginPath();
+    ctx.arc(q.x, by, r * 0.55, roll, roll + Math.PI * 1.2);
+    ctx.stroke();
+  }
+
+  // ---- upright humanoid sprite ---------------------------------------------
 
   /**
-   * Procedural top-down footballer. Drawn in local space where +x is the
-   * facing direction: boots and arms swing with the run cycle, a kick pose
-   * extends the striking leg, and the whole body rotates to any angle.
+   * Procedural upright footballer for the broadcast view. Drawn at the
+   * player's foot position, scaled by depth. Legs scissor with the run
+   * cycle, arms counter-swing, a kick pose extends the striking leg, and
+   * facing is conveyed by mirroring + head orientation.
    */
   private drawHumanoid(ctx: CanvasRenderingContext2D, p: PlayerEntity, kit: Kit) {
+    const q = proj(p.x, p.y);
+    const s = q.s;
     const speed = Math.hypot(p.vx, p.vy);
     const moving = speed > 30;
     const swing = moving ? Math.sin(p.animPhase) : 0;
-    const ang = Math.atan2(p.facing.y, p.facing.x);
     const kicking = p.kickTimer > 0;
 
-    this.drawShadow(ctx, p.x, p.y, p.r * 0.85);
+    const fx = p.facing.x;
+    const fy = p.facing.y;
+    // Horizontal mirror: face left or right on screen.
+    const side = fx >= 0 ? 1 : -1;
+    // How much the player faces toward/away from the camera.
+    const toward = clamp(fy, -1, 1);
 
-    // Possession ring (under the body).
+    // Ground decorations (not scaled by ctx transform — drawn in screen px).
+    // Possession ring / selection ring under the feet.
     if (this.owner === p) {
-      ctx.strokeStyle = 'rgba(198,255,46,0.9)';
-      ctx.lineWidth = 2.5;
+      ctx.strokeStyle = 'rgba(198,255,46,0.85)';
+      ctx.lineWidth = 2;
       ctx.beginPath();
-      ctx.arc(p.x, p.y, p.r + 6, 0, Math.PI * 2);
+      ctx.ellipse(q.x, q.y + 2 * s, 15 * s, 6 * s, 0, 0, Math.PI * 2);
       ctx.stroke();
     }
 
+    // Shadow.
+    ctx.fillStyle = 'rgba(0,0,0,0.28)';
+    ctx.beginPath();
+    ctx.ellipse(q.x + 2 * s, q.y + 1.5 * s, 11 * s, 4 * s, 0, 0, Math.PI * 2);
+    ctx.fill();
+
     ctx.save();
-    ctx.translate(p.x, p.y);
-    ctx.rotate(ang);
+    ctx.translate(q.x, q.y);
+    ctx.scale(s, s);
 
-    // Boots (alternate along the facing axis while running).
-    let frontFoot = swing * 7;
-    let backFoot = -swing * 7;
+    const H = 44; // body height at scale 1
+    const hipY = -H * 0.42;
+    const shoulderY = -H * 0.78;
+    const headY = -H * 0.9;
+    const bob = moving ? -Math.abs(Math.sin(p.animPhase)) * 1.6 : 0;
+
+    // Leg stride vector on screen: mostly horizontal when running across,
+    // shorter when running into/out of the screen.
+    const strideX = fx * 6.5;
+    const strideY = fy * 2.6;
+
+    let f1x = swing * strideX;
+    let f1y = swing * strideY;
+    let f2x = -swing * strideX;
+    let f2y = -swing * strideY;
+    let f1Lift = moving ? Math.max(0, Math.sin(p.animPhase)) * 3 : 0;
+    let f2Lift = moving ? Math.max(0, -Math.sin(p.animPhase)) * 3 : 0;
     if (kicking) {
-      frontFoot = 12; // striking leg extended
-      backFoot = -4;
+      f1x = fx * 9;
+      f1y = fy * 3.5;
+      f1Lift = 4.5;
+      f2x = -fx * 3;
+      f2y = -fy * 1.2;
+      f2Lift = 0;
     }
-    ctx.fillStyle = '#16181d';
-    ctx.beginPath();
-    ctx.ellipse(frontFoot, -5, 4, 2.8, 0, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.beginPath();
-    ctx.ellipse(backFoot, 5, 4, 2.8, 0, 0, Math.PI * 2);
-    ctx.fill();
 
-    // Arms (counter-swing to the legs).
-    const armSwing = kicking ? 5 : -swing * 6;
-    ctx.fillStyle = kit.sleeve;
-    ctx.beginPath();
-    ctx.arc(armSwing, -9.5, 2.8, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.beginPath();
-    ctx.arc(-armSwing, 9.5, 2.8, 0, Math.PI * 2);
-    ctx.fill();
+    const sockColor = '#e8ecf2';
+    const drawLeg = (footX: number, footY: number, lift: number, hipX: number) => {
+      const fy2 = footY - lift;
+      // Thigh + calf as a single two-tone limb.
+      ctx.strokeStyle = p.skin;
+      ctx.lineWidth = 3.4;
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.moveTo(hipX, hipY + bob);
+      const kneeX = (hipX + footX) / 2;
+      const kneeY = (hipY + bob + fy2) / 2 - 1.5;
+      ctx.quadraticCurveTo(kneeX, kneeY, footX, fy2 - 4);
+      ctx.stroke();
+      // Sock.
+      ctx.strokeStyle = sockColor;
+      ctx.lineWidth = 3.2;
+      ctx.beginPath();
+      ctx.moveTo((kneeX + footX) / 2, (kneeY + fy2) / 2 - 2);
+      ctx.lineTo(footX, fy2 - 2.5);
+      ctx.stroke();
+      // Boot.
+      ctx.fillStyle = '#16181d';
+      ctx.beginPath();
+      ctx.ellipse(footX + side * 1.4, fy2 - 1, 3.4, 1.9, 0, 0, Math.PI * 2);
+      ctx.fill();
+    };
 
-    // Torso (shoulders wide, viewed from above).
+    // Far leg first (slightly darker), near leg after.
+    drawLeg(f2x, f2y, f2Lift, -side * 2.2);
+    drawLeg(f1x, f1y, f1Lift, side * 2.2);
+
+    // Shorts.
+    ctx.fillStyle = '#f4f6f9';
+    ctx.beginPath();
+    ctx.roundRect(-6, hipY + bob - 5, 12, 8, 3);
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(0,0,0,0.18)';
+    ctx.lineWidth = 0.8;
+    ctx.stroke();
+
+    // Arms (counter-swing). Far arm behind torso, near arm in front.
+    const armSwing = kicking ? 6 : -swing * 5;
+    const drawArm = (dir: number, swingAmt: number) => {
+      ctx.strokeStyle = kit.sleeve;
+      ctx.lineWidth = 3;
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.moveTo(dir * 5.5, shoulderY + bob + 2);
+      ctx.quadraticCurveTo(
+        dir * 7 + swingAmt * 0.4,
+        shoulderY + bob + 9,
+        dir * 5 + swingAmt,
+        hipY + bob + 1,
+      );
+      ctx.stroke();
+      // Hand.
+      ctx.fillStyle = p.skin;
+      ctx.beginPath();
+      ctx.arc(dir * 5 + swingAmt, hipY + bob + 1.5, 1.6, 0, Math.PI * 2);
+      ctx.fill();
+    };
+    drawArm(-side, -armSwing * side);
+
+    // Torso (shirt).
     ctx.fillStyle = kit.shirt;
     ctx.beginPath();
-    ctx.ellipse(0, 0, 6.5, 9.5, 0, 0, Math.PI * 2);
+    ctx.moveTo(-6.5, shoulderY + bob + 1);
+    ctx.quadraticCurveTo(0, shoulderY + bob - 2.5, 6.5, shoulderY + bob + 1);
+    ctx.lineTo(5.2, hipY + bob - 3);
+    ctx.quadraticCurveTo(0, hipY + bob - 1, -5.2, hipY + bob - 3);
+    ctx.closePath();
     ctx.fill();
     ctx.strokeStyle = kit.outline;
-    ctx.lineWidth = 1.5;
+    ctx.lineWidth = 1;
     ctx.stroke();
-    // Shoulder trim stripe.
-    ctx.fillStyle = kit.sleeve;
+    // Kit stripe.
+    ctx.strokeStyle = kit.sleeve;
+    ctx.lineWidth = 2;
     ctx.beginPath();
-    ctx.ellipse(-3.2, 0, 1.8, 8, 0, 0, Math.PI * 2);
-    ctx.fill();
+    ctx.moveTo(side * 3.4, shoulderY + bob + 0.5);
+    ctx.lineTo(side * 2.8, hipY + bob - 3);
+    ctx.stroke();
 
-    // Head: skin circle with hair covering the back of the crown.
+    // Near arm (in front of torso).
+    drawArm(side, armSwing * side);
+
+    // Head + hair, orientation hints from facing.
+    const headX = fx * 1.6;
     ctx.fillStyle = p.skin;
     ctx.beginPath();
-    ctx.arc(1.5, 0, 4.3, 0, Math.PI * 2);
+    ctx.arc(headX, headY + bob, 4.4, 0, Math.PI * 2);
     ctx.fill();
+    // Hair: cap on top; covers more of the face when running away from
+    // camera (toward < 0 = facing up/away → we see the back of the head).
     ctx.fillStyle = p.hair;
+    const hairBias = toward < -0.3 ? 1 : 0.45; // away → full back of head
     ctx.beginPath();
-    ctx.arc(0.4, 0, 3.7, Math.PI * 0.42, Math.PI * 1.58);
+    ctx.arc(headX, headY + bob, 4.4, Math.PI + 0.2, -0.2);
     ctx.fill();
+    if (toward < -0.3) {
+      ctx.beginPath();
+      ctx.arc(headX, headY + bob + 1, 3.9 * hairBias, 0, Math.PI * 2);
+      ctx.fill();
+    } else {
+      // Profile/front: small sideburn toward the back of the head.
+      ctx.beginPath();
+      ctx.arc(headX - side * 2.2, headY + bob + 0.5, 2, 0, Math.PI * 2);
+      ctx.fill();
+    }
 
     ctx.restore();
 
-    // Markers above the head (not rotated).
+    // Markers above the head (screen space).
+    const topY = q.y - 50 * s;
     if (p === this.controlled) {
       ctx.fillStyle = '#c6ff2e';
       ctx.beginPath();
-      ctx.moveTo(p.x, p.y - p.r - 9);
-      ctx.lineTo(p.x - 7, p.y - p.r - 20);
-      ctx.lineTo(p.x + 7, p.y - p.r - 20);
+      ctx.moveTo(q.x, topY);
+      ctx.lineTo(q.x - 6.5, topY - 10);
+      ctx.lineTo(q.x + 6.5, topY - 10);
       ctx.closePath();
       ctx.fill();
     } else if (p === this.switchHint) {
-      ctx.strokeStyle = 'rgba(198,255,46,0.75)';
+      ctx.strokeStyle = 'rgba(198,255,46,0.8)';
       ctx.lineWidth = 2;
       ctx.beginPath();
-      ctx.moveTo(p.x, p.y - p.r - 9);
-      ctx.lineTo(p.x - 7, p.y - p.r - 20);
-      ctx.lineTo(p.x + 7, p.y - p.r - 20);
+      ctx.moveTo(q.x, topY);
+      ctx.lineTo(q.x - 6.5, topY - 10);
+      ctx.lineTo(q.x + 6.5, topY - 10);
       ctx.closePath();
       ctx.stroke();
     }

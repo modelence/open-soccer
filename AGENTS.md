@@ -1,14 +1,5 @@
 ## PROJECT: PitchKick — arcade browser football game
 
-> **TEMPORARY STATE (2026-06-12):** Working tree has engine.ts + HomePage.tsx
-> restored to commit **705b669** (everything except the TV broadcast camera:
-> top-down humanoids + tackle fixes + smart shot assist + defensive
-> switching) — user is browsing old versions. The latest full version
-> (TV broadcast camera, 4v4, smart switching/shooting) is commit **258c03a**.
-> To return:
-> `git restore --source=258c03a -- src/client/game/engine.ts src/client/pages/HomePage.tsx`
-> Everything below describes the LATEST version (258c03a), not the working tree.
-
 A FIFA-like top-down football game played in the browser vs the CPU. Fully
 client-side, rendered on `<canvas>` with `requestAnimationFrame`. No backend
 game state yet (no Stores/queries for gameplay).
