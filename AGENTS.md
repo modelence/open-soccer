@@ -7,7 +7,14 @@ game state yet (no Stores/queries for gameplay).
 ### Game architecture
 - `src/client/game/engine.ts` — `PitchKickGame` class: the whole game loop,
   physics, input handling (window keydown/keyup), PC AI, and canvas rendering.
-  Field is 1050x680 with a 56px margin (`CANVAS_W`/`CANVAS_H` exported).
+  Field is 2200x950 with a 56px margin (`CANVAS_W=1162`/`CANVAS_H=700`
+  exported). The camera only shows part of the pitch (FIFA tele cam style):
+  engine `camX` follows ball + vel*0.25 lookahead with exponential smoothing
+  (k = 1-exp(-2.6dt)), clamped to CAM_MIN=500..CAM_MAX=FIELD_W-500. Render
+  syncs module-level `viewCamX` from it; `proj()` offsets x by viewCamX.
+  Full pitch depth (y) is always visible — pan is horizontal only.
+  Players projected off-screen (±60px) are culled; crowd dots + hoarding
+  span the whole pannable range and parallax with the camera.
   Calls a `HudState` listener each frame to push score/time/possession to React.
 - `src/client/pages/HomePage.tsx` — hosts the canvas, scoreboard HUD, start
   overlay, GOAL flash, and the controls legend. Instantiates the engine in a
@@ -79,15 +86,33 @@ game state yet (no Stores/queries for gameplay).
 - Speeds (slowed from v1): walk 165, sprint 255, teammate 155, CPU chase
   180 / carry 165 / formation 140. Shot power 660, CPU shot 640.
 
-### Gameplay model (current: 4v4)
-- Both teams: 4 players in a diamond formation (`FORMATION` fractions in
-  engine.ts: defender / 2 mids / forward). Away is x-mirrored.
+### Gameplay model (current: 11v11)
+- Both teams: 11 players in a 4-4-2 (`FORMATION` fractions in engine.ts:
+  index 0 = GK, 1-4 DF, 5-8 MF, 9-10 ST). Away is x-mirrored.
+  `KICKOFF_FWD=9` (a striker) is the kickoff/initially-controlled player.
 - You = blue, attack right. Ball owner gets a lime ring.
 - Non-controlled teammates hold formation, shifted by ball position
   (`formationTarget`: anchor + ball offset * 0.35x/0.25y).
-- CPU AI: carrier dribbles toward left goal, shoots when x < 250, passes to a
+- GOALKEEPERS (basic, `isGK` flag on index 0; distinct kits via `kitFor`:
+  home amber HOME_GK_KIT, away mint AWAY_GK_KIT):
+  - `keeperTarget`: tracks ball depth along the line (mid + (ball.y-mid)*0.55,
+    clamped inside the frame), steps out 46px when ball within 320 of own
+    goal, else 26. Never chases.
+  - Home GK with the ball: `homeKeeperDistribute(dt)` — holds 0.7s
+    (gkHoldTimer), then auto-passes to the most open non-GK teammate
+    (openness = nearestOpponentDist - |x - FIELD_W*0.45|*0.1), power
+    clamp(d*1.4, 480, 740). NOT user-controlled distribution.
+  - Away GK with the ball: stands, then clears long to most open teammate.
+  - GKs excluded from Q-switching (unless owner or ball within 160) and
+    from CPU chaser selection (unless ball within 200).
+- CPU AI: carrier dribbles toward left goal, shoots when x < 300, passes to a
   more-advanced open teammate when pressured (<85px); nearest non-carrier
   chases ball with anticipation; rest hold formation. Decisions every 0.45s.
+- Pass powers rescaled for the big pitch: short clamp(d*1.85,300,540),
+  long clamp(d*1.5,460,780) cap 900, through clamp(d*1.6,400,640) lead 150,
+  short pref ~240, through pref ~380. Pitch markings rescaled: 18 mow
+  stripes, centre circle r=130, penalty box 300x560, six-yard 110x300,
+  GOAL_HEIGHT=240.
 - Possession: nearest player (either team) within CONTROL_DIST grabs ball;
   kicker is excluded for 0.45s after kicking (`lastKicker`/`kickerLock`) so
   passes aren't instantly re-grabbed; lock clears when anyone receives.
@@ -111,8 +136,9 @@ game state yet (no Stores/queries for gameplay).
   full-time verdict freezes play.
 
 ### NOT YET BUILT (future slices)
-- Goalkeepers as distinct entities, offside, fouls, throw-ins/corners.
-- Manual player switch key, tackling/slide tackle.
+- GK diving/saving animations (keeper is just a line-tracking outfielder
+  sprite for now), offside, fouls, throw-ins/corners.
+- Slide tackle, ball height (lobs/crosses/chips).
 - Difficulty levels, player stats, persistence of results to a Store.
 
 ## Comprehensive Project Structure Overview

@@ -122,7 +122,8 @@ export default function HomePage() {
               READY TO <span className="text-volt-500">KICK OFF?</span>
             </h1>
             <p className="font-body text-night-600 mb-8 text-center max-w-md">
-              4v4 against the CPU. You control the{' '}
+              Full 11v11 against the CPU — the TV camera follows the ball. You control
+              the{' '}
               <span className="text-home-500 font-semibold">blue</span> player with the
               solid <span className="text-volt-400 font-semibold">▼</span>. A hollow ▽
               hints who <span className="text-volt-400 font-semibold">Q</span> will

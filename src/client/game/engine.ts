@@ -1,13 +1,13 @@
-// PitchKick — arcade football engine (4v4 vs CPU).
+// PitchKick — arcade football engine (11v11 vs CPU).
 // Pure canvas + requestAnimationFrame. No React inside the hot loop.
 // Simulation is flat 2D; rendering uses a pseudo-3D TV broadcast camera
 // (perspective trapezoid pitch, upright animated player sprites scaled by
 // depth) — 16-bit FIFA / ISS style.
 
-export const FIELD_W = 1050;
-export const FIELD_H = 680;
+export const FIELD_W = 2200;
+export const FIELD_H = 950;
 export const MARGIN = 56;
-export const CANVAS_W = FIELD_W + MARGIN * 2;
+export const CANVAS_W = 1162;
 export const CANVAS_H = 700;
 
 // ---- TV broadcast projection ----------------------------------------------
@@ -21,6 +21,14 @@ const PITCH_TOP = 116; // screen y of the far touchline
 const PITCH_DRAW_H = 510; // screen height of the pitch
 const AVG_S = (S_FAR + S_NEAR) / 2;
 
+// The camera pans horizontally to follow the ball (FIFA tele cam) — only a
+// section of the pitch is visible at a time. `viewCamX` is the field x the
+// camera is centred on; the engine updates it every frame before rendering.
+let viewCamX = FIELD_W / 2;
+/** Camera clamp so the goal + some behind-goal apron stays on screen. */
+const CAM_MIN = 500;
+const CAM_MAX = FIELD_W - 500;
+
 /** Project field coordinates to screen coordinates. */
 function proj(x: number, y: number): { x: number; y: number; s: number } {
   const t = clamp(y / FIELD_H, -0.2, 1.2);
@@ -28,13 +36,13 @@ function proj(x: number, y: number): { x: number; y: number; s: number } {
   // Integral of the scale function → vertical spacing matches foreshortening.
   const v = (S_FAR * t + 0.5 * (S_NEAR - S_FAR) * t * t) / AVG_S;
   return {
-    x: CANVAS_W / 2 + (x - FIELD_W / 2) * s,
+    x: CANVAS_W / 2 + (x - viewCamX) * s,
     y: PITCH_TOP + PITCH_DRAW_H * v,
     s,
   };
 }
 
-const GOAL_HEIGHT = 200;
+const GOAL_HEIGHT = 240;
 const GOAL_DEPTH = 38;
 const goalTop = FIELD_H / 2 - GOAL_HEIGHT / 2;
 const goalBottom = FIELD_H / 2 + GOAL_HEIGHT / 2;
@@ -75,6 +83,7 @@ interface PlayerEntity {
   kickTimer: number;
   hair: string;
   skin: string;
+  isGK: boolean;
 }
 
 export interface HudState {
@@ -98,13 +107,22 @@ const MOVE_KEYS = new Set([
   'Space',
 ]);
 
-// Diamond formation as fractions of the field (home attacks right).
+// 4-4-2 formation as fractions of the field (home attacks right).
+// Index 0 is the goalkeeper; KICKOFF_FWD takes the kickoff.
 const FORMATION: Vec[] = [
-  { x: 0.16, y: 0.5 }, // defender
-  { x: 0.36, y: 0.26 }, // midfield top
-  { x: 0.36, y: 0.74 }, // midfield bottom
-  { x: 0.56, y: 0.5 }, // forward
+  { x: 0.045, y: 0.5 }, // GK
+  { x: 0.16, y: 0.16 }, // RB
+  { x: 0.14, y: 0.38 }, // CB
+  { x: 0.14, y: 0.62 }, // CB
+  { x: 0.16, y: 0.84 }, // LB
+  { x: 0.34, y: 0.14 }, // RM
+  { x: 0.32, y: 0.4 }, // CM
+  { x: 0.32, y: 0.6 }, // CM
+  { x: 0.34, y: 0.86 }, // LM
+  { x: 0.52, y: 0.38 }, // ST
+  { x: 0.52, y: 0.62 }, // ST
 ];
+const KICKOFF_FWD = 9;
 
 const HAIR_COLORS = ['#2b2118', '#0e0c0a', '#5a3b1e', '#857058'];
 const SKIN_TONES = ['#e0ac7e', '#c98c5e', '#8d5a3b', '#f0c49a'];
@@ -117,6 +135,14 @@ interface Kit {
 
 const HOME_KIT: Kit = { shirt: '#2e9bff', sleeve: '#1268c4', outline: '#0c3e78' };
 const AWAY_KIT: Kit = { shirt: '#ff4d4d', sleeve: '#c42626', outline: '#7a1414' };
+// Keepers wear distinct kits, like real football.
+const HOME_GK_KIT: Kit = { shirt: '#ffb52e', sleeve: '#cc8512', outline: '#7a4d08' };
+const AWAY_GK_KIT: Kit = { shirt: '#27e0a6', sleeve: '#12a878', outline: '#0a5c42' };
+
+function kitFor(p: PlayerEntity): Kit {
+  if (p.isGK) return p.team === 'home' ? HOME_GK_KIT : AWAY_GK_KIT;
+  return p.team === 'home' ? HOME_KIT : AWAY_KIT;
+}
 
 function len(x: number, y: number) {
   return Math.hypot(x, y) || 1;
@@ -172,6 +198,8 @@ export class PitchKickGame {
   private message = '';
   private messageTimer = 0;
   private freeze = 0;
+  /** TV camera x (field coordinates), follows the ball with smoothing. */
+  private camX = FIELD_W / 2;
 
   private listener: StateListener;
 
@@ -185,7 +213,7 @@ export class PitchKickGame {
     this.awayPlayers = FORMATION.map((f, i) =>
       this.makePlayer('away', { x: 1 - f.x, y: f.y }, i),
     );
-    this.controlled = this.homePlayers[3]; // forward
+    this.controlled = this.homePlayers[KICKOFF_FWD];
 
     this.resetKickoff('home');
   }
@@ -204,6 +232,7 @@ export class PitchKickGame {
       kickTimer: 0,
       hair: HAIR_COLORS[(i + (team === 'away' ? 2 : 0)) % HAIR_COLORS.length],
       skin: SKIN_TONES[(i + (team === 'away' ? 1 : 0)) % SKIN_TONES.length],
+      isGK: i === 0,
     };
   }
 
@@ -256,11 +285,15 @@ export class PitchKickGame {
 
     // Put the kicking team's forward on the ball.
     const fwd =
-      kickingTeam === 'home' ? this.homePlayers[3] : this.awayPlayers[3];
+      kickingTeam === 'home'
+        ? this.homePlayers[KICKOFF_FWD]
+        : this.awayPlayers[KICKOFF_FWD];
     fwd.x = FIELD_W / 2 + (kickingTeam === 'home' ? -34 : 34);
     fwd.y = FIELD_H / 2;
 
-    if (kickingTeam === 'home') this.controlled = this.homePlayers[3];
+    if (kickingTeam === 'home') this.controlled = this.homePlayers[KICKOFF_FWD];
+
+    this.camX = FIELD_W / 2;
 
     this.owner = null;
     this.lastKicker = null;
@@ -409,8 +442,16 @@ export class PitchKickGame {
     this.resolvePossession();
     this.updateBall(dt);
     this.handleGoals();
+    this.updateCamera(dt);
 
     this.justPressed = [];
+  }
+
+  /** Pan the TV camera toward the ball (with a little velocity lookahead). */
+  private updateCamera(dt: number) {
+    const target = clamp(this.ball.x + this.ball.vx * 0.25, CAM_MIN, CAM_MAX);
+    const k = 1 - Math.exp(-2.6 * dt);
+    this.camX += (target - this.camX) * k;
   }
 
   /**
@@ -467,6 +508,9 @@ export class PitchKickGame {
     let bestScore = Infinity;
     for (const p of this.homePlayers) {
       if (p === exclude) continue;
+      // The keeper is never auto-suggested (FIFA-style) unless he has the
+      // ball or it's right next to him.
+      if (p.isGK && this.owner !== p && dist(p, this.ball) > 160) continue;
       const s = this.switchScore(p);
       if (s < bestScore) {
         bestScore = s;
@@ -643,7 +687,7 @@ export class PitchKickGame {
     let aim: Vec;
     if (isThrough) {
       // Lead the receiver into space toward the CPU goal.
-      const lead = 110;
+      const lead = 150;
       aim = {
         x: clamp(target.x + lead, 30, FIELD_W - 20),
         y: clamp(target.y + target.vy * 0.25, 20, FIELD_H - 20),
@@ -658,10 +702,10 @@ export class PitchKickGame {
 
     const d = dist(this.ball, aim);
     const power = isLong
-      ? clamp(d * 1.55, 430, 650)
+      ? clamp(d * 1.5, 460, 780)
       : isThrough
-        ? clamp(d * 1.65, 390, 580)
-        : clamp(d * 1.85, 300, 500);
+        ? clamp(d * 1.6, 400, 640)
+        : clamp(d * 1.85, 300, 540);
 
     this.kickBallToward(aim, power, kicker);
 
@@ -694,9 +738,9 @@ export class PitchKickGame {
       // Heavily penalise teammates behind the kick direction.
       let score = align * 100;
 
-      if (opts.short) score -= Math.abs(d - 220) * 0.25;
-      else if (opts.long) score += clamp(d, 0, 600) * 0.15;
-      else score -= Math.abs(d - 320) * 0.15; // through
+      if (opts.short) score -= Math.abs(d - 240) * 0.25;
+      else if (opts.long) score += clamp(d, 0, 900) * 0.15;
+      else score -= Math.abs(d - 380) * 0.15; // through
 
       if (score > bestScore) {
         bestScore = score;
@@ -726,6 +770,7 @@ export class PitchKickGame {
   // ---- teammates AI (home, non-controlled) --------------------------------
 
   private formationTarget(p: PlayerEntity): Vec {
+    if (p.isGK) return this.keeperTarget(p);
     return {
       x: clamp(
         p.anchor.x + (this.ball.x - FIELD_W / 2) * 0.35,
@@ -740,10 +785,33 @@ export class PitchKickGame {
     };
   }
 
+  /** Keeper stays on his line and tracks the ball across the goal mouth. */
+  private keeperTarget(p: PlayerEntity): Vec {
+    const mid = FIELD_H / 2;
+    const ty = clamp(
+      mid + (this.ball.y - mid) * 0.55,
+      goalTop + 16,
+      goalBottom - 16,
+    );
+    // Step slightly off the line when the ball is close on his side.
+    const ownGoalX = p.team === 'home' ? 0 : FIELD_W;
+    const ballDX = Math.abs(this.ball.x - ownGoalX);
+    const out = ballDX < 320 ? 46 : 26;
+    const tx = p.team === 'home' ? p.anchor.x + out - 26 : p.anchor.x - out + 26;
+    return { x: tx, y: ty };
+  }
+
   private updateHomeTeammates(dt: number) {
     for (const p of this.homePlayers) {
       if (p === this.controlled) continue;
       if (this.owner === p) {
+        if (p.isGK) {
+          // Your keeper distributes automatically: pass to the most open
+          // teammate (control stays where it is — no auto-switch).
+          this.steer(p, 0, 0, dt);
+          this.homeKeeperDistribute(dt);
+          continue;
+        }
         // A teammate has the ball but you haven't switched to them:
         // they shield it and wait for you (press Q to take over).
         this.steer(p, 0, 0, dt);
@@ -754,13 +822,42 @@ export class PitchKickGame {
     }
   }
 
+  private gkHoldTimer = 0;
+
+  private homeKeeperDistribute(dt: number) {
+    const gk = this.owner;
+    if (!gk) return;
+    this.gkHoldTimer += dt;
+    if (this.gkHoldTimer < 0.7) return; // brief hold before clearing
+    this.gkHoldTimer = 0;
+    let best: PlayerEntity | null = null;
+    let bestScore = -Infinity;
+    for (const m of this.homePlayers) {
+      if (m === gk || m.isGK) continue;
+      const score =
+        this.nearestOpponentDist(m) - Math.abs(m.x - FIELD_W * 0.45) * 0.1;
+      if (score > bestScore) {
+        bestScore = score;
+        best = m;
+      }
+    }
+    if (best) {
+      const d = dist(this.ball, best);
+      this.kickBallToward(best, clamp(d * 1.4, 480, 740), gk);
+    }
+  }
+
   // ---- CPU team AI ---------------------------------------------------------
 
   private updateAwayTeam(dt: number) {
     const carrier =
       this.owner && this.owner.team === 'away' ? this.owner : null;
+    // The keeper never leaves his area to chase.
+    const outfield = this.awayPlayers.filter(
+      (p) => !p.isGK || dist(p, this.ball) < 200,
+    );
     const chaser =
-      carrier ?? this.nearestTo(this.awayPlayers, this.ball) ?? this.awayPlayers[0];
+      carrier ?? this.nearestTo(outfield, this.ball) ?? this.awayPlayers[1];
 
     for (const p of this.awayPlayers) {
       if (p === carrier) {
@@ -779,6 +876,28 @@ export class PitchKickGame {
   }
 
   private updateAwayCarrier(p: PlayerEntity, dt: number) {
+    // The keeper doesn't dribble out — he clears long upfield.
+    if (p.isGK) {
+      this.steer(p, 0, 0, dt);
+      if (this.cpuDecision > 0) return;
+      this.cpuDecision = 0.5;
+      let best: PlayerEntity | null = null;
+      let bestScore = -Infinity;
+      for (const m of this.awayPlayers) {
+        if (m === p || m.isGK) continue;
+        const score = this.nearestOpponentDist(m) - Math.abs(m.x - FIELD_W * 0.5) * 0.1;
+        if (score > bestScore) {
+          bestScore = score;
+          best = m;
+        }
+      }
+      if (best) {
+        const d = dist(this.ball, best);
+        this.kickBallToward(best, clamp(d * 1.4, 500, 760), p);
+      }
+      return;
+    }
+
     // Dribble toward the player's (left) goal.
     const t = { x: 36, y: FIELD_H / 2 + (p.y - FIELD_H / 2) * 0.35 };
     this.moveToward(p, t, AWAY_CARRY_SPEED, dt);
@@ -789,7 +908,7 @@ export class PitchKickGame {
     const pressure = this.nearestOpponentDist(p);
 
     // Shoot when in range.
-    if (p.x < 250) {
+    if (p.x < 300) {
       const gy = clamp(p.y, goalTop + 24, goalBottom - 24);
       this.kickBallToward({ x: 0, y: gy }, 640, p);
       return;
@@ -982,6 +1101,7 @@ export class PitchKickGame {
 
   private render() {
     const ctx = this.ctx;
+    viewCamX = this.camX; // sync the projection with the engine camera
     ctx.clearRect(0, 0, CANVAS_W, CANVAS_H);
 
     // Stadium backdrop: dark stands above the far touchline.
@@ -1000,9 +1120,12 @@ export class PitchKickGame {
     type Drawable = { depth: number; draw: () => void };
     const items: Drawable[] = [];
     for (const p of [...this.awayPlayers, ...this.homePlayers]) {
+      // Cull players well outside the camera view.
+      const px = proj(p.x, p.y).x;
+      if (px < -60 || px > CANVAS_W + 60) continue;
       items.push({
         depth: p.y,
-        draw: () => this.drawHumanoid(ctx, p, p.team === 'home' ? HOME_KIT : AWAY_KIT),
+        draw: () => this.drawHumanoid(ctx, p, kitFor(p)),
       });
     }
     items.push({ depth: this.ball.y, draw: () => this.drawBall(ctx) });
@@ -1013,19 +1136,24 @@ export class PitchKickGame {
     this.drawGoalFront(ctx, 'right');
   }
 
-  /** Flickering crowd dots in the stands behind the far touchline. */
+  /** Crowd dots + hoarding behind the far touchline, with camera parallax. */
   private drawCrowd(ctx: CanvasRenderingContext2D) {
     const top = 18;
     const bottom = PITCH_TOP - 14;
     ctx.fillStyle = '#101a28';
     ctx.fillRect(0, top, CANVAS_W, bottom - top);
+    // Stands pan with the camera at the far-line rate (parallax).
+    const offset = -(this.camX - FIELD_W / 2) * S_FAR;
+    const span = (CAM_MAX - CAM_MIN) * S_FAR + CANVAS_W + 100;
+    const x0 = -(CAM_MAX - FIELD_W / 2) * S_FAR - 50;
     // Deterministic pseudo-random dots (no per-frame flicker).
-    for (let i = 0; i < 420; i++) {
+    for (let i = 0; i < 760; i++) {
       const n = Math.sin(i * 127.1) * 43758.5453;
       const fx = n - Math.floor(n);
       const n2 = Math.sin(i * 311.7) * 12543.123;
       const fy = n2 - Math.floor(n2);
-      const x = fx * CANVAS_W;
+      const x = x0 + fx * span + offset;
+      if (x < -4 || x > CANVAS_W + 4) continue;
       const y = top + 6 + fy * (bottom - top - 12);
       const shade = 0.10 + ((i * 37) % 23) / 23 * 0.22;
       ctx.fillStyle = `rgba(180,200,230,${shade.toFixed(3)})`;
@@ -1037,8 +1165,10 @@ export class PitchKickGame {
     ctx.fillStyle = 'rgba(198,255,46,0.55)';
     ctx.font = '700 11px Oswald, sans-serif';
     ctx.textAlign = 'center';
-    for (let x = 80; x < CANVAS_W; x += 220) {
-      ctx.fillText('P I T C H K I C K', x, bottom + (PITCH_TOP - bottom) / 2 + 4);
+    for (let x = x0; x < x0 + span; x += 220) {
+      const sx = x + offset;
+      if (sx < -110 || sx > CANVAS_W + 110) continue;
+      ctx.fillText('P I T C H K I C K', sx, bottom + (PITCH_TOP - bottom) / 2 + 4);
     }
   }
 
@@ -1065,7 +1195,7 @@ export class PitchKickGame {
     ctx.fill();
 
     // Mow stripes (vertical bands converging toward the far line).
-    const stripes = 12;
+    const stripes = 18;
     const sw = FIELD_W / stripes;
     for (let i = 0; i < stripes; i++) {
       this.projPath(ctx, [
@@ -1102,8 +1232,8 @@ export class PitchKickGame {
     for (let i = 0; i <= 40; i++) {
       const a = (i / 40) * Math.PI * 2;
       circle.push({
-        x: FIELD_W / 2 + Math.cos(a) * 80,
-        y: FIELD_H / 2 + Math.sin(a) * 80,
+        x: FIELD_W / 2 + Math.cos(a) * 130,
+        y: FIELD_H / 2 + Math.sin(a) * 130,
       });
     }
     this.projPath(ctx, circle, false);
@@ -1115,10 +1245,10 @@ export class PitchKickGame {
     ctx.fill();
 
     // Penalty boxes + six-yard boxes.
-    const boxH = 320;
-    const boxW = 150;
-    const sixH = 160;
-    const sixW = 60;
+    const boxH = 560;
+    const boxW = 300;
+    const sixH = 300;
+    const sixW = 110;
     const by = (FIELD_H - boxH) / 2;
     const sy = (FIELD_H - sixH) / 2;
     for (const left of [true, false]) {
