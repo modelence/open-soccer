@@ -692,10 +692,14 @@ export class PitchKickGame {
   ) {
     const { isShort, isLong, isThrough } = opts;
 
-    const target = this.pickPassTarget(kicker, { short: isShort, long: isLong });
+    const target = this.pickPassTarget(kicker, {
+      short: isShort,
+      long: isLong,
+      through: isThrough,
+    });
     if (!target) {
-      // No teammate available — knock it forward in the facing direction.
-      const f = kicker.facing;
+      // No teammate available — knock it in the aimed direction.
+      const f = this.heldDir(kicker);
       this.ball.vx = f.x * 380;
       this.ball.vy = f.y * 380;
       this.afterKick(kicker);
@@ -751,18 +755,36 @@ export class PitchKickGame {
     this.controlled = target;
   }
 
+  /** The direction the user is holding on the arrows, falling back to the
+   *  kicker's facing when no arrow is held (FIFA: your held direction at
+   *  the moment of the pass picks the intended receiver). */
+  private heldDir(kicker: PlayerEntity): Vec {
+    let dx = 0;
+    let dy = 0;
+    if (this.keys.has('ArrowUp')) dy -= 1;
+    if (this.keys.has('ArrowDown')) dy += 1;
+    if (this.keys.has('ArrowLeft')) dx -= 1;
+    if (this.keys.has('ArrowRight')) dx += 1;
+    if (dx === 0 && dy === 0) return kicker.facing;
+    const l = len(dx, dy);
+    return { x: dx / l, y: dy / l };
+  }
+
   /**
-   * Pick the best teammate for a pass: favours players aligned with the
-   * kicker's facing direction; short passes prefer close players, long
-   * passes prefer distant ones.
+   * FIFA-style receiver selection: the HELD ARROW direction picks the
+   * target — the first teammate in the aimed cone wins, with alignment
+   * dominating. No preferred-distance bands (the old ~380px through-ball
+   * band made W skip the close runner for a farther one). Long passes
+   * keep a mild bonus for distance so A finds the far outlet.
    */
   private pickPassTarget(
     kicker: PlayerEntity,
-    opts: { short: boolean; long: boolean },
+    opts: { short: boolean; long: boolean; through: boolean },
   ): PlayerEntity | null {
+    const aim = this.heldDir(kicker);
     const mates = (
       kicker.team === 'home' ? this.homePlayers : this.awayPlayers
-    ).filter((p) => p !== kicker);
+    ).filter((p) => p !== kicker && !(opts.through && p.isGK));
 
     let best: PlayerEntity | null = null;
     let bestScore = -Infinity;
@@ -771,14 +793,19 @@ export class PitchKickGame {
       const dx = m.x - kicker.x;
       const dy = m.y - kicker.y;
       const d = len(dx, dy);
-      const align = (dx / d) * kicker.facing.x + (dy / d) * kicker.facing.y;
+      const align = (dx / d) * aim.x + (dy / d) * aim.y;
 
-      // Heavily penalise teammates behind the kick direction.
-      let score = align * 100;
+      // Alignment with the aimed direction dominates everything else.
+      let score = align * 260;
+      // Teammates behind / far outside the aim cone are a last resort.
+      if (align < 0.1) score -= 400;
 
-      if (opts.short) score -= Math.abs(d - 240) * 0.25;
-      else if (opts.long) score += clamp(d, 0, 900) * 0.15;
-      else score -= Math.abs(d - 380) * 0.15; // through
+      if (opts.long) {
+        score += clamp(d, 0, 900) * 0.12; // find the far outlet
+      } else {
+        // Short & through: first man along the aim, nearest wins ties.
+        score -= d * (opts.short ? 0.3 : 0.22);
+      }
 
       if (score > bestScore) {
         bestScore = score;

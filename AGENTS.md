@@ -33,8 +33,14 @@ game state yet (no Stores/queries for gameplay).
   the ball->target segment minus their radius (distToSegment helper near
   top of engine.ts). Picks the clearest lane so shots steer around
   blockers — user demanded this after shots kept hitting opponents.
-- Passes target a real teammate chosen by facing-direction alignment +
-  distance preference (short ~220px, long = farthest forward, through ~320px).
+- Pass receiver selection (v2, FIFA-researched after W kept skipping the
+  near runner): the HELD ARROW direction at the moment of the pass picks
+  the receiver (`heldDir`, falls back to facing when no arrow held).
+  Score = align*260, -400 if align<0.1 (behind aim = last resort);
+  short/through subtract d*(0.3/0.22) so the FIRST man in the aimed cone
+  wins; long ADDS clamp(d,0,900)*0.12 (far outlet). NO distance bands
+  (old ~380 through band caused the skip). Through passes exclude the GK.
+  No-target fallback knock also uses heldDir.
   Control follows YOUR pass to the receiver (user-initiated, FIFA-style).
 - Switch selection (`switchScore`, lower = better): when CPU has the ball,
   candidates are scored by distance to an INTERCEPT point ~70px ahead of
@@ -155,7 +161,7 @@ game state yet (no Stores/queries for gameplay).
   direction (their velocity, when moving >50; else straight at the
   opponent goal); never leads backwards (forward component forced to
   0.55 if run points back). Short/long passes still lead vel*0.2.
-  Selection prefs: short ~240, long farthest fwd cap 900, through ~380.
+  (Receiver selection: see "Pass receiver selection (v2)" above.)
 - Pitch markings rescaled: 18 mow stripes, centre circle r=130, penalty
   box 300x560, six-yard 110x300, GOAL_HEIGHT=240.
 - Possession: nearest player (either team) within CONTROL_DIST grabs ball;
