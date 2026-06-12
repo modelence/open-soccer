@@ -45,17 +45,32 @@ game state yet (no Stores/queries for gameplay).
 - If a non-controlled home teammate ends up owning the ball, they stand and
   shield it until the user presses Q to take over.
 
-### Visuals: procedural humanoid sprites (NOT external assets)
-- `drawHumanoid()` in engine.ts draws top-down footballers (Sensible-Soccer
-  style): boots + arms swing with a distance-driven run cycle (`animPhase`),
-  kick pose via `kickTimer` (0.28s, set in `afterKick`), torso ellipse with
-  kit/sleeve/outline colors, skin+hair head. Whole body rotates to `facing`.
+### Visuals: TV broadcast pseudo-3D camera (v3, user-requested)
+- User never wanted pure top-down — wanted FIFA/TV angle. Simulation stays
+  flat 2D (x = goal-to-goal, y = depth between touchlines); ONLY rendering
+  changed. Projection in engine.ts top: `proj(x,y)` → screen {x,y,s} with
+  scale lerp S_FAR=0.56 (far touchline, y=0) → S_NEAR=1.0 (near, y=FIELD_H);
+  screenY uses the INTEGRAL of scale so vertical foreshortening is correct.
+  PITCH_TOP=116, PITCH_DRAW_H=510, CANVAS_H=700 (CANVAS_W unchanged).
+- `drawHumanoid()` now draws UPRIGHT footballers at foot position, scaled
+  by depth: two-tone legs (skin + sock + boot) scissor with distance-driven
+  `animPhase`, lift on swing, kick pose extends striking leg, arms counter-
+  swing (far arm behind torso, near in front), shirt + white shorts, head
+  shows back-of-head hair when facing away (facing.y < -0.3), mirror by
+  facing.x sign. Body height 44 at scale 1. Markers ▼/▽ at q.y - 50*s.
+- Pitch: `projPath()` helper projects polygons; trapezoid grass apron, 12
+  converging mow stripes, projected lines/boxes/centre circle (sampled).
+- Goals are REAL standing frames: `goalGeom()` posts at (0|FIELD_W,
+  goalTop/goalBottom), postH=58*s, net mesh + back structure drawn BEFORE
+  players (`drawGoalBack`), posts+crossbar AFTER (`drawGoalFront`).
+- Stadium dressing: gradient sky, deterministic crowd dots, PITCHKICK
+  hoarding strip above far touchline.
+- Ball + players depth-sorted together into one draw list (ball is a
+  drawable at depth ball.y); ball drawn with radial gradient, lifted 0.7r.
 - Kits: HOME_KIT blue / AWAY_KIT red; HAIR_COLORS/SKIN_TONES vary per player.
-- Players y-sorted before drawing for natural overlap.
-- Researched open sprite options: Kenney Sports Pack (CC0, has top-down
-  soccer but static poses, no run/kick frames); LPC sprites are 4-dir 3/4
-  view — wrong for 360° top-down rotation. Procedural chosen deliberately.
-  If user uploads a spritesheet via File Manager, can swap it in.
+- Researched open sprite options earlier: Kenney Sports Pack (CC0, static
+  poses), LPC (4-dir 3/4 view) — procedural chosen deliberately.
+- Uses ctx.roundRect (Chrome 99+/modern browsers OK).
 
 ### Movement feel (tuned for smoothness, v2)
 - Inertia: `steer()` lerps velocity toward target (`ACCEL=8`/s); facing
