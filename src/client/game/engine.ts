@@ -1,5 +1,7 @@
 // PitchKick — arcade football engine (4v4 vs CPU).
 // Pure canvas + requestAnimationFrame. No React inside the hot loop.
+// Players are procedurally drawn top-down humanoids (Sensible-Soccer style)
+// with a run cycle and kick pose, rotating freely to their facing angle.
 
 export const FIELD_W = 1050;
 export const FIELD_H = 680;
@@ -12,15 +14,22 @@ const GOAL_DEPTH = 38;
 const goalTop = FIELD_H / 2 - GOAL_HEIGHT / 2;
 const goalBottom = FIELD_H / 2 + GOAL_HEIGHT / 2;
 
-const PLAYER_R = 15;
-const BALL_R = 9;
-const WALK_SPEED = 215;
-const SPRINT_SPEED = 340;
-const TEAMMATE_SPEED = 205;
-const AWAY_CHASE_SPEED = 235;
-const AWAY_CARRY_SPEED = 212;
-const AWAY_FORMATION_SPEED = 185;
-const CONTROL_DIST = PLAYER_R + BALL_R + 12;
+const PLAYER_R = 14;
+const BALL_R = 8;
+
+// Tuned down from the first prototype — calmer, more readable pace.
+const WALK_SPEED = 165;
+const SPRINT_SPEED = 255;
+const TEAMMATE_SPEED = 155;
+const AWAY_CHASE_SPEED = 180;
+const AWAY_CARRY_SPEED = 165;
+const AWAY_FORMATION_SPEED = 140;
+const CONTROL_DIST = PLAYER_R + BALL_R + 11;
+
+/** How quickly velocity approaches the desired velocity (per second). */
+const ACCEL = 8;
+/** Max turn rate in radians per second. */
+const TURN_RATE = 13;
 
 type Vec = { x: number; y: number };
 type Team = 'home' | 'away';
@@ -35,7 +44,12 @@ interface PlayerEntity {
   /** Formation anchor in field coordinates. */
   anchor: Vec;
   facing: Vec;
-  number: number;
+  /** Run-cycle phase, advanced by distance travelled. */
+  animPhase: number;
+  /** > 0 while playing the kick pose. */
+  kickTimer: number;
+  hair: string;
+  skin: string;
 }
 
 export interface HudState {
@@ -49,6 +63,7 @@ export interface HudState {
 type StateListener = (s: HudState) => void;
 
 const KICK_KEYS = new Set(['KeyW', 'KeyS', 'KeyA', 'KeyD']);
+const ACTION_KEYS = new Set(['KeyW', 'KeyS', 'KeyA', 'KeyD', 'KeyQ']);
 const MOVE_KEYS = new Set([
   'ArrowUp',
   'ArrowDown',
@@ -65,6 +80,18 @@ const FORMATION: Vec[] = [
   { x: 0.36, y: 0.74 }, // midfield bottom
   { x: 0.56, y: 0.5 }, // forward
 ];
+
+const HAIR_COLORS = ['#2b2118', '#0e0c0a', '#5a3b1e', '#857058'];
+const SKIN_TONES = ['#e0ac7e', '#c98c5e', '#8d5a3b', '#f0c49a'];
+
+interface Kit {
+  shirt: string;
+  sleeve: string;
+  outline: string;
+}
+
+const HOME_KIT: Kit = { shirt: '#2e9bff', sleeve: '#1268c4', outline: '#0c3e78' };
+const AWAY_KIT: Kit = { shirt: '#ff4d4d', sleeve: '#c42626', outline: '#7a1414' };
 
 function len(x: number, y: number) {
   return Math.hypot(x, y) || 1;
@@ -91,11 +118,12 @@ export class PitchKickGame {
   private homePlayers: PlayerEntity[] = [];
   private awayPlayers: PlayerEntity[] = [];
   private controlled!: PlayerEntity;
+  /** The player Q would switch to (rendered as a hollow marker). */
+  private switchHint: PlayerEntity | null = null;
 
   private owner: PlayerEntity | null = null;
   private lastKicker: PlayerEntity | null = null;
   private kickerLock = 0;
-  private switchCooldown = 0;
   private cpuDecision = 0;
 
   private homeScore = 0;
@@ -132,7 +160,10 @@ export class PitchKickGame {
       team,
       anchor: { x: frac.x * FIELD_W, y: frac.y * FIELD_H },
       facing: { x: team === 'home' ? 1 : -1, y: 0 },
-      number: i + 2, // shirts 2..5
+      animPhase: Math.random() * Math.PI * 2,
+      kickTimer: 0,
+      hair: HAIR_COLORS[(i + (team === 'away' ? 2 : 0)) % HAIR_COLORS.length],
+      skin: SKIN_TONES[(i + (team === 'away' ? 1 : 0)) % SKIN_TONES.length],
     };
   }
 
@@ -158,8 +189,8 @@ export class PitchKickGame {
   // ---- input --------------------------------------------------------------
 
   private onKeyDown = (e: KeyboardEvent) => {
-    if (MOVE_KEYS.has(e.code) || KICK_KEYS.has(e.code)) e.preventDefault();
-    if (!e.repeat && KICK_KEYS.has(e.code)) this.justPressed.push(e.code);
+    if (MOVE_KEYS.has(e.code) || ACTION_KEYS.has(e.code)) e.preventDefault();
+    if (!e.repeat && ACTION_KEYS.has(e.code)) this.justPressed.push(e.code);
     this.keys.add(e.code);
   };
 
@@ -179,6 +210,7 @@ export class PitchKickGame {
       p.x = p.anchor.x;
       p.y = p.anchor.y;
       p.vx = p.vy = 0;
+      p.kickTimer = 0;
       p.facing = { x: p.team === 'home' ? 1 : -1, y: 0 };
     }
 
@@ -193,7 +225,7 @@ export class PitchKickGame {
     this.owner = null;
     this.lastKicker = null;
     this.kickerLock = 0;
-    this.freeze = 0.8;
+    this.freeze = 0.9;
   }
 
   private setMessage(msg: string, secs: number) {
@@ -214,10 +246,12 @@ export class PitchKickGame {
   private nearestTo(
     players: PlayerEntity[],
     pt: { x: number; y: number },
-  ): PlayerEntity {
-    let best = players[0];
+    exclude?: PlayerEntity,
+  ): PlayerEntity | null {
+    let best: PlayerEntity | null = null;
     let bestD = Infinity;
     for (const p of players) {
+      if (p === exclude) continue;
       const d = dist(p, pt);
       if (d < bestD) {
         bestD = d;
@@ -232,6 +266,43 @@ export class PitchKickGame {
     let best = Infinity;
     for (const o of opps) best = Math.min(best, dist(p, o));
     return best;
+  }
+
+  // ---- movement helpers ---------------------------------------------------
+
+  /** Smoothly steer a player toward a desired velocity (inertia + turning). */
+  private steer(p: PlayerEntity, targetVx: number, targetVy: number, dt: number) {
+    const k = 1 - Math.exp(-ACCEL * dt);
+    p.vx += (targetVx - p.vx) * k;
+    p.vy += (targetVy - p.vy) * k;
+    p.x += p.vx * dt;
+    p.y += p.vy * dt;
+
+    const sp = Math.hypot(p.vx, p.vy);
+    if (sp > 25) this.faceToward(p, p.vx / sp, p.vy / sp, dt);
+    p.animPhase += sp * dt * 0.055;
+
+    this.clampToField(p);
+  }
+
+  /** Rotate facing toward a unit direction at a capped turn rate. */
+  private faceToward(p: PlayerEntity, dx: number, dy: number, dt: number) {
+    const cur = Math.atan2(p.facing.y, p.facing.x);
+    const tgt = Math.atan2(dy, dx);
+    let diff = tgt - cur;
+    while (diff > Math.PI) diff -= Math.PI * 2;
+    while (diff < -Math.PI) diff += Math.PI * 2;
+    const ang = cur + clamp(diff, -TURN_RATE * dt, TURN_RATE * dt);
+    p.facing = { x: Math.cos(ang), y: Math.sin(ang) };
+  }
+
+  private moveToward(p: PlayerEntity, t: Vec, speed: number, dt: number) {
+    const dx = t.x - p.x;
+    const dy = t.y - p.y;
+    const d = len(dx, dy);
+    // Slow into the target so AI players don't orbit/jitter.
+    const sp = d < 36 ? speed * (d / 36) : speed;
+    this.steer(p, (dx / d) * sp, (dy / d) * sp, dt);
   }
 
   // ---- update -------------------------------------------------------------
@@ -255,8 +326,10 @@ export class PitchKickGame {
     }
     if (this.kickerLock > 0) this.kickerLock -= dt;
     else this.lastKicker = null;
-    if (this.switchCooldown > 0) this.switchCooldown -= dt;
     if (this.cpuDecision > 0) this.cpuDecision -= dt;
+    for (const p of [...this.homePlayers, ...this.awayPlayers]) {
+      if (p.kickTimer > 0) p.kickTimer -= dt;
+    }
 
     if (this.freeze > 0) {
       this.freeze -= dt;
@@ -279,7 +352,8 @@ export class PitchKickGame {
       }
     }
 
-    this.autoSwitchControl();
+    this.updateSwitchHint();
+    this.handleSwitchKey();
     this.updateControlled(dt);
     this.updateHomeTeammates(dt);
     this.updateAwayTeam(dt);
@@ -290,17 +364,36 @@ export class PitchKickGame {
     this.justPressed = [];
   }
 
-  /** Switch the user's controlled player to the most relevant one. */
-  private autoSwitchControl() {
-    if (this.owner && this.owner.team === 'home') {
-      this.controlled = this.owner;
+  /**
+   * Compute who Q would switch to. No automatic switching happens here —
+   * the hint is only a marker until the user presses Q (passing is the one
+   * exception: control follows the pass you played).
+   */
+  private updateSwitchHint() {
+    if (this.owner && this.owner.team === 'home' && this.owner !== this.controlled) {
+      this.switchHint = this.owner;
       return;
     }
-    if (this.switchCooldown > 0) return;
-    const nearest = this.nearestTo(this.homePlayers, this.ball);
-    if (nearest !== this.controlled) {
-      this.controlled = nearest;
-      this.switchCooldown = 0.35;
+    const candidate = this.nearestTo(this.homePlayers, this.ball, this.controlled);
+    // Only suggest a switch when the candidate is meaningfully closer.
+    if (
+      candidate &&
+      dist(candidate, this.ball) + 30 < dist(this.controlled, this.ball)
+    ) {
+      this.switchHint = candidate;
+    } else {
+      this.switchHint = null;
+    }
+  }
+
+  private handleSwitchKey() {
+    if (!this.justPressed.includes('KeyQ')) return;
+    const target =
+      this.switchHint ??
+      this.nearestTo(this.homePlayers, this.ball, this.controlled);
+    if (target) {
+      this.controlled = target;
+      this.switchHint = null;
     }
   }
 
@@ -315,25 +408,18 @@ export class PitchKickGame {
 
     const speed = this.keys.has('KeyE') ? SPRINT_SPEED : WALK_SPEED;
 
+    let tvx = 0;
+    let tvy = 0;
     if (dx !== 0 || dy !== 0) {
       const l = len(dx, dy);
-      dx /= l;
-      dy /= l;
-      p.vx = dx * speed;
-      p.vy = dy * speed;
-      p.facing = { x: dx, y: dy };
-    } else {
-      p.vx = 0;
-      p.vy = 0;
+      tvx = (dx / l) * speed;
+      tvy = (dy / l) * speed;
     }
-
-    p.x += p.vx * dt;
-    p.y += p.vy * dt;
-    this.clampToField(p);
+    this.steer(p, tvx, tvy, dt);
 
     const owns = this.owner === p;
     for (const code of this.justPressed) {
-      if (!owns) continue;
+      if (!owns || !KICK_KEYS.has(code)) continue;
       this.doHomeKick(code);
     }
   }
@@ -346,7 +432,7 @@ export class PitchKickGame {
     if (code === 'KeyD') {
       // Shot — aim at the CPU goal mouth.
       const ty = clamp(this.ball.y, goalTop + 24, goalBottom - 24);
-      this.kickBallToward({ x: FIELD_W, y: ty }, 720, kicker);
+      this.kickBallToward({ x: FIELD_W, y: ty }, 660, kicker);
       return;
     }
 
@@ -359,8 +445,8 @@ export class PitchKickGame {
     if (!target) {
       // No teammate available — knock it forward in the facing direction.
       const f = kicker.facing;
-      this.ball.vx = f.x * 420;
-      this.ball.vy = f.y * 420;
+      this.ball.vx = f.x * 380;
+      this.ball.vy = f.y * 380;
       this.afterKick(kicker);
       return;
     }
@@ -368,7 +454,7 @@ export class PitchKickGame {
     let aim: Vec;
     if (isThrough) {
       // Lead the receiver into space toward the CPU goal.
-      const lead = 120;
+      const lead = 110;
       aim = {
         x: clamp(target.x + lead, 30, FIELD_W - 20),
         y: clamp(target.y + target.vy * 0.25, 20, FIELD_H - 20),
@@ -383,16 +469,15 @@ export class PitchKickGame {
 
     const d = dist(this.ball, aim);
     const power = isLong
-      ? clamp(d * 1.6, 460, 700)
+      ? clamp(d * 1.55, 430, 650)
       : isThrough
-        ? clamp(d * 1.7, 420, 620)
-        : clamp(d * 1.9, 320, 540);
+        ? clamp(d * 1.65, 390, 580)
+        : clamp(d * 1.85, 300, 500);
 
     this.kickBallToward(aim, power, kicker);
 
-    // FIFA-style: control jumps to the receiver right away.
+    // Control follows your pass (FIFA-style). All other switching is Q-only.
     this.controlled = target;
-    this.switchCooldown = 0.5;
   }
 
   /**
@@ -430,8 +515,6 @@ export class PitchKickGame {
       }
     }
 
-    // If the best option is fully behind the facing direction, still allow it
-    // (you may want a back-pass) but only when facing roughly backwards keys.
     return best;
   }
 
@@ -448,6 +531,7 @@ export class PitchKickGame {
     this.owner = null;
     this.lastKicker = kicker;
     this.kickerLock = 0.45;
+    kicker.kickTimer = 0.28;
   }
 
   // ---- teammates AI (home, non-controlled) --------------------------------
@@ -467,25 +551,16 @@ export class PitchKickGame {
     };
   }
 
-  private moveToward(p: PlayerEntity, t: Vec, speed: number, dt: number) {
-    const dx = t.x - p.x;
-    const dy = t.y - p.y;
-    const d = len(dx, dy);
-    if (d < 6) {
-      p.vx = p.vy = 0;
-      return;
-    }
-    p.vx = (dx / d) * speed;
-    p.vy = (dy / d) * speed;
-    p.x += p.vx * dt;
-    p.y += p.vy * dt;
-    p.facing = { x: dx / d, y: dy / d };
-    this.clampToField(p);
-  }
-
   private updateHomeTeammates(dt: number) {
     for (const p of this.homePlayers) {
       if (p === this.controlled) continue;
+      if (this.owner === p) {
+        // A teammate has the ball but you haven't switched to them:
+        // they shield it and wait for you (press Q to take over).
+        this.steer(p, 0, 0, dt);
+        this.faceToward(p, 1, 0, dt);
+        continue;
+      }
       this.moveToward(p, this.formationTarget(p), TEAMMATE_SPEED, dt);
     }
   }
@@ -495,7 +570,8 @@ export class PitchKickGame {
   private updateAwayTeam(dt: number) {
     const carrier =
       this.owner && this.owner.team === 'away' ? this.owner : null;
-    const chaser = carrier ?? this.nearestTo(this.awayPlayers, this.ball);
+    const chaser =
+      carrier ?? this.nearestTo(this.awayPlayers, this.ball) ?? this.awayPlayers[0];
 
     for (const p of this.awayPlayers) {
       if (p === carrier) {
@@ -519,14 +595,14 @@ export class PitchKickGame {
     this.moveToward(p, t, AWAY_CARRY_SPEED, dt);
 
     if (this.cpuDecision > 0) return;
-    this.cpuDecision = 0.45;
+    this.cpuDecision = 0.5;
 
     const pressure = this.nearestOpponentDist(p);
 
     // Shoot when in range.
     if (p.x < 250) {
       const gy = clamp(p.y, goalTop + 24, goalBottom - 24);
-      this.kickBallToward({ x: 0, y: gy }, 690, p);
+      this.kickBallToward({ x: 0, y: gy }, 640, p);
       return;
     }
 
@@ -549,7 +625,7 @@ export class PitchKickGame {
         const d = dist(this.ball, best);
         this.kickBallToward(
           { x: best.x + best.vx * 0.2, y: best.y + best.vy * 0.2 },
-          clamp(d * 1.9, 320, 600),
+          clamp(d * 1.85, 300, 560),
           p,
         );
       }
@@ -580,11 +656,11 @@ export class PitchKickGame {
   }
 
   private dribble(owner: PlayerEntity) {
-    const ahead = owner.r + this.ball.r + 5;
+    const ahead = owner.r + this.ball.r + 4;
     const targetX = owner.x + owner.facing.x * ahead;
     const targetY = owner.y + owner.facing.y * ahead;
-    this.ball.x += (targetX - this.ball.x) * 0.35;
-    this.ball.y += (targetY - this.ball.y) * 0.35;
+    this.ball.x += (targetX - this.ball.x) * 0.3;
+    this.ball.y += (targetY - this.ball.y) * 0.3;
     this.ball.vx = owner.vx;
     this.ball.vy = owner.vy;
   }
@@ -667,12 +743,19 @@ export class PitchKickGame {
     ctx.strokeStyle = 'rgba(0,0,0,0.35)';
     ctx.lineWidth = 1.5;
     ctx.stroke();
+    // Simple panel detail so the roll reads.
+    ctx.strokeStyle = 'rgba(0,0,0,0.2)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.arc(this.ball.x, this.ball.y, this.ball.r * 0.5, 0, Math.PI * 2);
+    ctx.stroke();
 
-    for (const p of this.awayPlayers) {
-      this.drawPlayer(ctx, p, '#ff4d4d', '#ff9b9b');
-    }
-    for (const p of this.homePlayers) {
-      this.drawPlayer(ctx, p, '#2e9bff', '#7cc4ff');
+    // Sort by y so lower players overlap upper ones naturally.
+    const everyone = [...this.awayPlayers, ...this.homePlayers].sort(
+      (a, b) => a.y - b.y,
+    );
+    for (const p of everyone) {
+      this.drawHumanoid(ctx, p, p.team === 'home' ? HOME_KIT : AWAY_KIT);
     }
 
     ctx.restore();
@@ -749,47 +832,104 @@ export class PitchKickGame {
     ctx.fill();
   }
 
-  private drawPlayer(
-    ctx: CanvasRenderingContext2D,
-    p: PlayerEntity,
-    color: string,
-    ring: string,
-  ) {
-    this.drawShadow(ctx, p.x, p.y, p.r);
+  // ---- humanoid sprite ----------------------------------------------------
 
-    // Possession ring.
+  /**
+   * Procedural top-down footballer. Drawn in local space where +x is the
+   * facing direction: boots and arms swing with the run cycle, a kick pose
+   * extends the striking leg, and the whole body rotates to any angle.
+   */
+  private drawHumanoid(ctx: CanvasRenderingContext2D, p: PlayerEntity, kit: Kit) {
+    const speed = Math.hypot(p.vx, p.vy);
+    const moving = speed > 30;
+    const swing = moving ? Math.sin(p.animPhase) : 0;
+    const ang = Math.atan2(p.facing.y, p.facing.x);
+    const kicking = p.kickTimer > 0;
+
+    this.drawShadow(ctx, p.x, p.y, p.r * 0.85);
+
+    // Possession ring (under the body).
     if (this.owner === p) {
-      ctx.strokeStyle = '#c6ff2e';
-      ctx.lineWidth = 3;
+      ctx.strokeStyle = 'rgba(198,255,46,0.9)';
+      ctx.lineWidth = 2.5;
       ctx.beginPath();
       ctx.arc(p.x, p.y, p.r + 6, 0, Math.PI * 2);
       ctx.stroke();
     }
 
-    ctx.fillStyle = color;
+    ctx.save();
+    ctx.translate(p.x, p.y);
+    ctx.rotate(ang);
+
+    // Boots (alternate along the facing axis while running).
+    let frontFoot = swing * 7;
+    let backFoot = -swing * 7;
+    if (kicking) {
+      frontFoot = 12; // striking leg extended
+      backFoot = -4;
+    }
+    ctx.fillStyle = '#16181d';
     ctx.beginPath();
-    ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+    ctx.ellipse(frontFoot, -5, 4, 2.8, 0, 0, Math.PI * 2);
     ctx.fill();
-    ctx.strokeStyle = ring;
-    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.ellipse(backFoot, 5, 4, 2.8, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Arms (counter-swing to the legs).
+    const armSwing = kicking ? 5 : -swing * 6;
+    ctx.fillStyle = kit.sleeve;
+    ctx.beginPath();
+    ctx.arc(armSwing, -9.5, 2.8, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(-armSwing, 9.5, 2.8, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Torso (shoulders wide, viewed from above).
+    ctx.fillStyle = kit.shirt;
+    ctx.beginPath();
+    ctx.ellipse(0, 0, 6.5, 9.5, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = kit.outline;
+    ctx.lineWidth = 1.5;
     ctx.stroke();
+    // Shoulder trim stripe.
+    ctx.fillStyle = kit.sleeve;
+    ctx.beginPath();
+    ctx.ellipse(-3.2, 0, 1.8, 8, 0, 0, Math.PI * 2);
+    ctx.fill();
 
-    // Shirt number.
-    ctx.fillStyle = 'rgba(255,255,255,0.92)';
-    ctx.font = '600 13px Barlow, sans-serif';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(String(p.number), p.x, p.y + 0.5);
+    // Head: skin circle with hair covering the back of the crown.
+    ctx.fillStyle = p.skin;
+    ctx.beginPath();
+    ctx.arc(1.5, 0, 4.3, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = p.hair;
+    ctx.beginPath();
+    ctx.arc(0.4, 0, 3.7, Math.PI * 0.42, Math.PI * 1.58);
+    ctx.fill();
 
-    // Controlled-player marker (volt triangle above head).
+    ctx.restore();
+
+    // Markers above the head (not rotated).
     if (p === this.controlled) {
       ctx.fillStyle = '#c6ff2e';
       ctx.beginPath();
-      ctx.moveTo(p.x, p.y - p.r - 8);
-      ctx.lineTo(p.x - 7, p.y - p.r - 19);
-      ctx.lineTo(p.x + 7, p.y - p.r - 19);
+      ctx.moveTo(p.x, p.y - p.r - 9);
+      ctx.lineTo(p.x - 7, p.y - p.r - 20);
+      ctx.lineTo(p.x + 7, p.y - p.r - 20);
       ctx.closePath();
       ctx.fill();
+    } else if (p === this.switchHint) {
+      ctx.strokeStyle = 'rgba(198,255,46,0.75)';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(p.x, p.y - p.r - 9);
+      ctx.lineTo(p.x - 7, p.y - p.r - 20);
+      ctx.lineTo(p.x + 7, p.y - p.r - 20);
+      ctx.closePath();
+      ctx.stroke();
     }
   }
 }

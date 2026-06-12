@@ -14,6 +14,7 @@ const CONTROLS: { keys: string; label: string }[] = [
   { keys: 'S', label: 'Short pass' },
   { keys: 'A', label: 'Long pass' },
   { keys: 'W', label: 'Through pass' },
+  { keys: 'Q', label: 'Switch player' },
 ];
 
 function fmtTime(secs: number) {
@@ -122,9 +123,10 @@ export default function HomePage() {
             </h1>
             <p className="font-body text-night-600 mb-8 text-center max-w-md">
               4v4 against the CPU. You control the{' '}
-              <span className="text-home-500 font-semibold">blue</span> player marked
-              with a <span className="text-volt-400 font-semibold">▼</span> — passes
-              switch you to the receiver automatically.
+              <span className="text-home-500 font-semibold">blue</span> player with the
+              solid <span className="text-volt-400 font-semibold">▼</span>. A hollow ▽
+              hints who <span className="text-volt-400 font-semibold">Q</span> will
+              switch you to — selection never changes on its own.
             </p>
             <button
               onClick={handleStart}
@@ -138,7 +140,7 @@ export default function HomePage() {
       </div>
 
       {/* Controls legend */}
-      <div className="w-full max-w-5xl mt-5 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2 animate-fade-in">
+      <div className="w-full max-w-5xl mt-5 grid grid-cols-2 sm:grid-cols-4 md:grid-cols-7 gap-2 animate-fade-in">
         {CONTROLS.map((c) => (
           <div
             key={c.label}
@@ -155,9 +157,9 @@ export default function HomePage() {
       </div>
 
       <p className="mt-5 text-xs text-night-700 font-body text-center max-w-xl">
-        Tip: passes go to the teammate you're facing — face up the pitch and hit{' '}
-        <span className="text-volt-400">W</span> to play a through ball into space,
-        then <span className="text-volt-400">D</span> to shoot.
+        Tip: passes go to the teammate you're facing and hand you control of the
+        receiver. Off the ball, selection is yours — press{' '}
+        <span className="text-volt-400">Q</span> to jump to the hinted ▽ player.
       </p>
     </div>
   );
