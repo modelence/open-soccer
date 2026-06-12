@@ -1,9 +1,10 @@
 ## PROJECT: PitchKick — arcade browser football game
 
 > **TEMPORARY STATE (2026-06-12):** Working tree has engine.ts + HomePage.tsx
-> restored to the FIRST version (commit bcc71a9, basic 1v1 circles) at the
-> user's request "for a moment". The latest full version (TV broadcast camera,
-> 4v4, smart switching/shooting) is commit **258c03a**. To return:
+> restored to commit **65e3753** (v2: 4v4 top-down circles, passing,
+> auto-switching) — user is browsing old versions. The latest full version
+> (TV broadcast camera, 4v4, smart switching/shooting) is commit **258c03a**.
+> To return:
 > `git restore --source=258c03a -- src/client/game/engine.ts src/client/pages/HomePage.tsx`
 > Everything below describes the LATEST version (258c03a), not the working tree.
 
