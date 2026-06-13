@@ -96,12 +96,23 @@ game state yet (no Stores/queries for gameplay).
   back-of-head hair when facing away (facing.y<-0.3), mirror by facing.x
   sign. Body height 44 at scale 1. Markers ▼/▽ at q.y - 50*s.
   `shade(hex,f)` global helper lightens/darkens #rrggbb by a factor.
+- LEGS are TWO-BONE IK (`drawLeg(footX,footY,lift,hipX,far)`): SEG=9.6
+  thigh≈shin, knee solved at half hip→foot distance + perpendicular rigid
+  offset (hgt=sqrt(SEG²-a²)) bent FORWARD (perp x-sign matched to facing),
+  reach-clamped. Draws thigh (hip→knee skin), shin (knee→calf skin,
+  calf→foot sock), knee highlight dot, angled boot w/ kit accent. `far`
+  leg shaded darker. Called far first (drawLeg(...,-side*2.2,true)) then
+  near (drawLeg(...,side*2.2,false)).
 - Pitch: `projPath()` helper projects polygons. GRAPHICS PASS: 20 mow
-  stripes each with its own vertical depth gradient, gradient apron, faint
-  horizontal mow-texture lines, projected lines/boxes, centre circle + spot,
-  penalty SPOTS + "D" arcs (via `strokeArc()`), corner arcs, and a radial
-  VIGNETTE overlay. `strokeArc(cx,cy,r,a0,a1)` samples a field-space arc
-  through proj; `spot(x,y)` draws a marking dot.
+  stripes each with its own vertical depth gradient, gradient apron,
+  projected lines/boxes, centre circle + spot, penalty SPOTS + "D" arcs
+  (via `strokeArc()`), corner arcs, and a radial VIGNETTE overlay.
+  `strokeArc(cx,cy,r,a0,a1)` samples a field-space arc through proj;
+  `spot(x,y)` draws a marking dot. GRASS TEXTURE: `drawGrassSpeckle()`
+  (REPLACED the old horizontal mow lines per user request) — procedural
+  blades on a 26px grid via deterministic per-cell sin-hash (stable, no
+  flicker), short leaning tufts lighter/darker than turf, only visible
+  cells visited, near tufts larger via proj scale.
 - Goals are REAL standing frames: `goalGeom()` posts at (0|FIELD_W,
   goalTop/goalBottom), postH=58*s, net mesh + back structure drawn BEFORE
   players (`drawGoalBack`), posts+crossbar AFTER (`drawGoalFront`).

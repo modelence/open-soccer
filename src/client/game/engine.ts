@@ -1801,17 +1801,12 @@ export class PitchKickGame {
       ctx.fill();
     }
 
-    // Faint horizontal mow texture lines for extra turf detail.
-    ctx.strokeStyle = 'rgba(255,255,255,0.035)';
-    ctx.lineWidth = 1;
-    for (let j = 1; j < 9; j++) {
-      const y = (FIELD_H * j) / 9;
-      this.projPath(ctx, [
-        { x: 0, y },
-        { x: FIELD_W, y },
-      ], false);
-      ctx.stroke();
-    }
+    // Real-grass speckle: many tiny deterministic flecks (lighter + darker
+    // than the turf) scattered across the visible pitch, denser/larger near
+    // the camera and sparser/smaller toward the far line — emulating blades
+    // of grass rather than a smooth fill. Only flecks inside the camera view
+    // are drawn (cheap), and the pattern is stable frame-to-frame.
+    this.drawGrassSpeckle(ctx);
 
     ctx.strokeStyle = 'rgba(255,255,255,0.82)';
     ctx.lineWidth = 2.5;
@@ -1918,6 +1913,53 @@ export class PitchKickGame {
     ctx.beginPath();
     ctx.arc(q.x, q.y, 2.6 * q.s, 0, Math.PI * 2);
     ctx.fill();
+  }
+
+  /**
+   * Procedural grass blades: a stable grid of short tufts, each jittered by
+   * a deterministic hash so the turf looks speckled/bladed rather than flat.
+   * Field-space cells (~26px) keep density uniform on the ground; projection
+   * naturally makes near tufts bigger and far tufts smaller. Only cells
+   * inside the horizontal camera view are visited.
+   */
+  private drawGrassSpeckle(ctx: CanvasRenderingContext2D) {
+    const cell = 26;
+    // Visible field-x span for the current camera (+ a small margin).
+    const halfView = CANVAS_W / 2 / S_FAR + cell;
+    const x0 = Math.max(0, Math.floor((this.camX - halfView) / cell) * cell);
+    const x1 = Math.min(FIELD_W, this.camX + halfView);
+
+    ctx.lineCap = 'round';
+    for (let gx = x0; gx < x1; gx += cell) {
+      for (let gy = 0; gy < FIELD_H; gy += cell) {
+        // Deterministic per-cell pseudo-random values.
+        const h = Math.sin(gx * 12.9898 + gy * 78.233) * 43758.5453;
+        const r1 = h - Math.floor(h);
+        const h2 = Math.sin(gx * 39.346 + gy * 11.135) * 24634.633;
+        const r2 = h2 - Math.floor(h2);
+        const h3 = Math.sin(gx * 73.156 + gy * 52.235) * 9871.123;
+        const r3 = h3 - Math.floor(h3);
+
+        const fxp = gx + r1 * cell;
+        const fyp = gy + r2 * cell;
+        const q = proj(fxp, fyp);
+        if (q.x < -6 || q.x > CANVAS_W + 6) continue;
+
+        // A short blade leaning slightly, lighter or darker than the turf.
+        const len2 = (1.4 + r3 * 1.8) * q.s;
+        const leanX = (r1 - 0.5) * 1.6 * q.s;
+        ctx.strokeStyle =
+          r3 > 0.5
+            ? `rgba(190,230,150,${0.05 + r2 * 0.05})`
+            : `rgba(8,40,18,${0.06 + r1 * 0.06})`;
+        ctx.lineWidth = 0.8 * q.s;
+        ctx.beginPath();
+        ctx.moveTo(q.x, q.y);
+        ctx.lineTo(q.x + leanX, q.y - len2);
+        ctx.stroke();
+      }
+    }
+    ctx.lineCap = 'butt';
   }
 
   // Goal frame: posts stand upright on screen; the mouth spans depth
@@ -2104,39 +2146,103 @@ export class PitchKickGame {
     }
 
     const sockColor = '#e8ecf2';
-    const drawLeg = (footX: number, footY: number, lift: number, hipX: number) => {
-      const fy2 = footY - lift;
-      // Thigh + calf as a single two-tone limb.
-      ctx.strokeStyle = p.skin;
-      ctx.lineWidth = 3.4;
+    // Two-bone leg: thigh (hip→knee) + shin (knee→foot) solved so the knee
+    // bends forward like a real leg. Equal segment lengths; the knee is
+    // placed off the hip→foot line by the amount needed to keep both bones
+    // rigid, so a lifted/planted foot flexes the knee naturally.
+    const SEG = 9.6; // thigh ≈ shin length
+    const drawLeg = (
+      footX: number,
+      footY: number,
+      lift: number,
+      hipX: number,
+      far: boolean,
+    ) => {
+      const hx = hipX;
+      const hy = hipY + bob;
+      let fX = footX;
+      const fY = footY - lift;
+
+      // Hip→foot, clamped to the leg's reach so the solve is always valid.
+      let dx = fX - hx;
+      let dy = fY - hy;
+      let d = Math.hypot(dx, dy) || 0.001;
+      const reach = SEG * 2 - 0.5;
+      if (d > reach) {
+        fX = hx + (dx / d) * reach;
+        dx = fX - hx;
+        d = reach;
+      }
+      const ux = dx / d;
+      const uy = dy / d;
+
+      // Knee = along the bone by half, offset perpendicular by the rigid
+      // height. Bend forward: the perpendicular's x must match facing.
+      const a = d / 2;
+      const hgt = Math.sqrt(Math.max(0, SEG * SEG - a * a));
+      let px = -uy;
+      let py = ux;
+      const forward = fx !== 0 ? Math.sign(fx) : side;
+      if (px * forward < 0) {
+        px = -px;
+        py = -py;
+      }
+      const kneeX = hx + ux * a + px * hgt;
+      const kneeY = hy + uy * a + py * hgt;
+
+      const skinC = far ? shade(p.skin, 0.82) : p.skin;
+      const sockC = far ? shade(sockColor, 0.86) : sockColor;
       ctx.lineCap = 'round';
+
+      // Thigh.
+      ctx.strokeStyle = skinC;
+      ctx.lineWidth = 3.7;
       ctx.beginPath();
-      ctx.moveTo(hipX, hipY + bob);
-      const kneeX = (hipX + footX) / 2;
-      const kneeY = (hipY + bob + fy2) / 2 - 1.5;
-      ctx.quadraticCurveTo(kneeX, kneeY, footX, fy2 - 4);
+      ctx.moveTo(hx, hy);
+      ctx.lineTo(kneeX, kneeY);
       ctx.stroke();
-      // Sock.
-      ctx.strokeStyle = sockColor;
-      ctx.lineWidth = 3.2;
+
+      // Shin (skin upper, sock lower).
+      const calfX = kneeX + (fX - kneeX) * 0.4;
+      const calfY = kneeY + (fY - kneeY) * 0.4;
+      ctx.lineWidth = 3.3;
       ctx.beginPath();
-      ctx.moveTo((kneeX + footX) / 2, (kneeY + fy2) / 2 - 2);
-      ctx.lineTo(footX, fy2 - 2.5);
+      ctx.moveTo(kneeX, kneeY);
+      ctx.lineTo(calfX, calfY);
       ctx.stroke();
-      // Boot: dark sole with a bright kit-accent flash.
-      ctx.fillStyle = '#101216';
+      ctx.strokeStyle = sockC;
+      ctx.lineWidth = 3.1;
       ctx.beginPath();
-      ctx.ellipse(footX + side * 1.4, fy2 - 1, 3.6, 2, 0, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.fillStyle = kit.sleeve;
+      ctx.moveTo(calfX, calfY);
+      ctx.lineTo(fX, fY);
+      ctx.stroke();
+
+      // Knee joint highlight.
+      ctx.fillStyle = skinC;
       ctx.beginPath();
-      ctx.ellipse(footX + side * 1.9, fy2 - 1.6, 1.5, 0.7, 0, 0, Math.PI * 2);
+      ctx.arc(kneeX, kneeY, 1.8, 0, Math.PI * 2);
       ctx.fill();
+
+      // Boot: dark sole with a bright kit-accent flash, angled along the
+      // shin so the foot points where the leg is going.
+      const bootAng = Math.atan2(fY - calfY, fX - calfX) + Math.PI / 2;
+      ctx.save();
+      ctx.translate(fX + forward * 1.2, fY - 0.6);
+      ctx.rotate(bootAng * 0.25);
+      ctx.fillStyle = far ? '#0a0c0f' : '#121419';
+      ctx.beginPath();
+      ctx.ellipse(forward * 1.4, 0, 3.7, 2, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = far ? shade(kit.sleeve, 0.8) : kit.sleeve;
+      ctx.beginPath();
+      ctx.ellipse(forward * 2, -0.7, 1.5, 0.7, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
     };
 
     // Far leg first (slightly darker), near leg after.
-    drawLeg(f2x, f2y, f2Lift, -side * 2.2);
-    drawLeg(f1x, f1y, f1Lift, side * 2.2);
+    drawLeg(f2x, f2y, f2Lift, -side * 2.2, true);
+    drawLeg(f1x, f1y, f1Lift, side * 2.2, false);
 
     // Shorts.
     const shortsGrad = ctx.createLinearGradient(
