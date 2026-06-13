@@ -78,22 +78,6 @@ export default function HomePage() {
         )}
       </header>
 
-      {/* Scoreboard */}
-      <div className="w-full max-w-5xl mb-3">
-        <div className="flex items-stretch justify-center gap-1 font-display select-none">
-          <Score label="YOU" color="text-home-500" value={hud.homeScore} active={hud.possession === 'home'} />
-          <div className="flex flex-col items-center justify-center px-6 bg-night-900 border-y-2 border-night-800">
-            <span className="font-heading text-[10px] tracking-[0.3em] text-night-600 uppercase">
-              Time
-            </span>
-            <span className="text-4xl leading-none text-volt-500 tabular-nums">
-              {fmtTime(hud.timeLeft)}
-            </span>
-          </div>
-          <Score label="CPU" color="text-away-500" value={hud.awayScore} active={hud.possession === 'away'} flip />
-        </div>
-      </div>
-
       {/* Pitch */}
       <div className="relative w-full max-w-5xl rounded-card overflow-hidden border border-night-800 shadow-2xl animate-slide-up">
         <canvas
@@ -103,6 +87,27 @@ export default function HomePage() {
           className="block w-full h-auto"
           style={{ aspectRatio: `${CANVAS_W} / ${CANVAS_H}` }}
         />
+
+        {/* FIFA-style broadcast scoreboard — compact pill overlaid on the
+            pitch (top-left), instead of a full row above the field. */}
+        {started && (
+          <div className="absolute top-3 left-3 flex items-stretch h-9 rounded-md overflow-hidden shadow-lg shadow-black/40 font-heading select-none animate-fade-in text-sm">
+            <ScoreTab label="YOU" accent="bg-home-500" active={hud.possession === 'home'} />
+            <span className="flex items-center px-2.5 bg-night-950/95 text-white text-base tabular-nums font-display">
+              {hud.homeScore}
+            </span>
+            <span className="flex items-center bg-night-950/95 text-night-600 text-xs">
+              –
+            </span>
+            <span className="flex items-center px-2.5 bg-night-950/95 text-white text-base tabular-nums font-display">
+              {hud.awayScore}
+            </span>
+            <ScoreTab label="CPU" accent="bg-away-500" active={hud.possession === 'away'} />
+            <span className="flex items-center px-2.5 bg-volt-500 text-night-950 text-sm tabular-nums font-bold tracking-tight">
+              {fmtTime(hud.timeLeft)}
+            </span>
+          </div>
+        )}
 
         {/* Centre message (GOAL etc.) */}
         {started && hud.message && (
@@ -170,29 +175,27 @@ export default function HomePage() {
   );
 }
 
-function Score({
+function ScoreTab({
   label,
-  color,
-  value,
+  accent,
   active,
-  flip,
 }: {
   label: string;
-  color: string;
-  value: number;
+  accent: string;
   active: boolean;
-  flip?: boolean;
 }) {
   return (
-    <div
-      className={`flex items-center gap-4 px-8 py-2 bg-night-900 border-y-2 ${
-        active ? 'border-volt-500' : 'border-night-800'
-      } transition-colors ${flip ? 'flex-row-reverse' : ''}`}
-    >
-      <span className={`font-heading uppercase tracking-widest text-sm ${color}`}>
+    <span className="flex items-center bg-night-950/95">
+      {/* Team colour bar — brightens with a possession dot when active. */}
+      <span className={`w-1 self-stretch ${accent}`} />
+      <span className="flex items-center gap-1.5 pl-2 pr-2.5 text-white uppercase tracking-wider text-xs font-bold">
         {label}
+        <span
+          className={`w-1.5 h-1.5 rounded-full transition-opacity ${
+            active ? `${accent} opacity-100` : 'bg-night-700 opacity-40'
+          }`}
+        />
       </span>
-      <span className="text-5xl leading-none text-white tabular-nums">{value}</span>
-    </div>
+    </span>
   );
 }

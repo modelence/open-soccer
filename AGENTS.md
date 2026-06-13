@@ -38,7 +38,10 @@ game state yet (no Stores/queries for gameplay).
   Calls a `HudState` listener each frame to push score/time/possession to React.
 - `src/client/pages/HomePage.tsx` — hosts the canvas, scoreboard HUD, start
   overlay, GOAL flash, and the controls legend. Instantiates the engine in a
-  `useEffect` keyed on `started`/`gameKey`.
+  `useEffect` keyed on `started`/`gameKey`. The scoreboard is a compact
+  FIFA-style overlay pill (`absolute top-3 left-3` inside the pitch container):
+  `[YOU tab][home]–[away][CPU tab][clock]`, with possession shown as a colored
+  dot inside each `ScoreTab`. No longer a separate row above the field.
 
 ### Controls (FIFA PC style)
 - Arrows = move, E = sprint, D = shot, S = short pass, A = long pass,
