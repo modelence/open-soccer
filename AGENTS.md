@@ -212,14 +212,30 @@ game state yet (no Stores/queries for gameplay).
   r=M(9.15), penalty box M(16.5)deep×M(40.32)wide, six-yard M(5.5)×M(18.32),
   penalty spot M(11) from goal, corner arc M(1), spot dots M(0.12).
   GOAL_HEIGHT=M(7.32)≈153 (mouth width), GOAL_DEPTH=M(2.0)≈42, goal posts
-  M(2.44) tall. PLAYER_R=M(0.52)≈11, BALL_R=M(0.42)≈9 (EXAGGERATED for
-  playability — a true 0.11m ball ≈2.7px is invisible; user reacted to it),
+  M(2.44) tall. PLAYER_R=M(0.52)≈11, BALL_R=M(0.32)≈6.7 (closer to FIFA's
+  true small scale per user; height renderer grows it as it rises so airborne
+  balls stay readable),
   CONTROL_DIST=PLAYER_R+BALL_R+16. Sprite: `PLAYER_SCALE=M(1.85)/44` applied
   in drawHumanoid (ground decos use `gs=s*PLAYER_SCALE`; body `ctx.scale(gs,
   gs)`; head markers at q.y-50*gs) → footballer stands ~1.85m.
 - Possession: nearest player (either team) within CONTROL_DIST grabs ball;
   kicker is excluded for 0.45s after kicking (`lastKicker`/`kickerLock`) so
   passes aren't instantly re-grabbed; lock clears when anyone receives.
+- BALL HEIGHT (z-axis), user-requested for FIFA feel. Ball now has z/vz on
+  top of x,y. `GRAVITY=M(46)` (exaggerated vs real 9.8 for arcade arcs),
+  `BOUNCE=0.58` restitution, `CONTROL_HEIGHT=M(1.25)` (ball above this sails
+  over everyone — resolvePossession early-returns owner=null while high).
+  updateBall integrates z + ground bounce; horizontal friction is ~12% of
+  normal while AIRBORNE (lofted balls carry, grounded balls decay as before),
+  and a bounce scrubs 14% of roll. dribble() forces z=vz=0; resetKickoff
+  zeroes them. `kickBallToward(aim,power,kicker,loft=0)` — loft is upward
+  vz launch. SHOTS: loft=M(0.6)+charge*M(7) (driven, rises slightly, stays
+  under bar). LONG PASS (A) = BALLISTIC LOFT: solves hang time T=clamp(0.62+
+  d/M(70)+charge*0.25,0.6,1.5), vz=0.5*GRAVITY*T, hspeed=d/T*1.12 → flies
+  over defenders, drops on receiver. Short/through stay grounded. handleGoals
+  rejects balls with z>M(2.44) (over the bar). drawBall lifts sprite by
+  z*q.s, shrinks/fades the ground shadow with height (hf=1/(1+z*0.03)), and
+  grows the ball slightly as it rises. Ball depth-sorts at its GROUND y.
 - Tackling (fixed twice after user reports; v2 fixed the GEOMETRY, not just
   timers — the dribble used to push the ball ahead of the tackler's facing,
   i.e. straight back into the opponent):

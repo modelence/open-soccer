@@ -59,12 +59,22 @@ const goalBottom = FIELD_H / 2 + GOAL_HEIGHT / 2;
 // A player's ground footprint ≈ 0.5 m radius; a regulation ball is 0.22 m
 // across (0.11 m radius) — genuinely small next to a footballer.
 const PLAYER_R = Math.round(M(0.52)); // ≈ 11
-// A true-scale ball (0.11 m radius ≈ 2.7 px) is invisible next to a 1.85 m
-// player, so — like every football game — we exaggerate it for playability.
-const BALL_R = M(0.42); // ≈ 9 px: clearly readable, still smaller than a foot
+// Closer to FIFA's true scale: a real ball is 0.22 m across. We draw it a
+// touch generous (0.32 m radius ≈ 6.7 px) so it stays trackable when grounded,
+// but the height renderer grows it as it rises so airborne balls read clearly.
+const BALL_R = M(0.32);
 // The upright sprite is drawn 44 internal units tall; scale it so a footballer
 // stands ~1.85 m in true world pixels (keeps player:ball:goal proportions).
 const PLAYER_SCALE = M(1.85) / 44;
+
+// ---- Ball height (z-axis) -------------------------------------------------
+// The pitch sim is on the ground plane (x,y); `z` is height ABOVE the grass so
+// the ball can be lofted, chipped, crossed and bounce like in FIFA. Gravity is
+// exaggerated vs real (9.8 m/s²) for snappy arcade arcs.
+const GRAVITY = M(46); // downward accel on the ball while airborne (px/s²)
+const BOUNCE = 0.58; // vertical restitution on landing
+/** A player can only trap/control the ball when it's below this height. */
+const CONTROL_HEIGHT = M(1.25);
 
 // Tuned down from the first prototype — calmer, more readable pace.
 const WALK_SPEED = 165;
@@ -226,7 +236,7 @@ export class PitchKickGame {
   private chargeKey: string | null = null;
   private chargeTime = 0;
 
-  private ball = { x: 0, y: 0, vx: 0, vy: 0, r: BALL_R };
+  private ball = { x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0, r: BALL_R };
   private homePlayers: PlayerEntity[] = [];
   private awayPlayers: PlayerEntity[] = [];
   private controlled!: PlayerEntity;
@@ -332,8 +342,10 @@ export class PitchKickGame {
   private resetKickoff(kickingTeam: Team) {
     this.ball.x = FIELD_W / 2;
     this.ball.y = FIELD_H / 2;
+    this.ball.z = 0;
     this.ball.vx = 0;
     this.ball.vy = 0;
+    this.ball.vz = 0;
 
     for (const p of [...this.homePlayers, ...this.awayPlayers]) {
       p.x = p.anchor.x;
@@ -830,7 +842,10 @@ export class PitchKickGame {
     // Charge controls shot power across a wide, clearly-felt range:
     // a tap is a soft placed side-foot (keeper-savable, can fall short from
     // distance), a full bar is a blast. ~3x spread so the gauge matters.
-    this.kickBallToward({ x: goalX, y: bestY }, 430 + 870 * charge, kicker);
+    // Harder shots rise more — a full blast lifts toward the top corners,
+    // while a placed side-foot stays low and grounded.
+    const loft = M(0.6) + charge * M(7);
+    this.kickBallToward({ x: goalX, y: bestY }, 430 + 870 * charge, kicker, loft);
   }
 
   private passAssisted(
@@ -895,14 +910,27 @@ export class PitchKickGame {
     }
 
     const d = dist(this.ball, aim);
+
+    if (isLong) {
+      // Long ball = a LOFTED, ballistic pass (FIFA): it flies over the
+      // defenders and drops onto the receiver. Solve a projectile so the
+      // hang time matches the horizontal travel (air friction is light, so
+      // horizontal speed stays roughly constant in flight). A fuller charge
+      // floats it higher and longer.
+      const T = clamp(0.62 + d / M(70) + charge * 0.25, 0.6, 1.5);
+      const vz = 0.5 * GRAVITY * T;
+      const hspeed = Math.min((d / T) * 1.12, 1500);
+      this.kickBallToward(aim, hspeed, kicker, vz);
+      this.controlled = target;
+      return;
+    }
+
     // Friction-aware power: arrive at the aim point still rolling at the
     // given speed (exponential friction covers (v0 - vEnd)/BALL_DECAY px),
     // instead of dying en route like the old distance multipliers did.
-    const base = isLong
-      ? this.passPower(d, 320, 1500)
-      : isThrough
-        ? this.passPower(d, 240, 1050)
-        : this.passPower(d, 260, 880);
+    const base = isThrough
+      ? this.passPower(d, 240, 1050)
+      : this.passPower(d, 260, 880);
     // FIFA assist: targeting is automatic, but the gauge still matters —
     // undercharged passes arrive soft/short, overcharged ones run past
     // the receiver. charge 0.4 ≈ the "right" weight.
@@ -981,12 +1009,21 @@ export class PitchKickGame {
     return Math.min(BALL_DECAY * d + arrival, max);
   }
 
-  private kickBallToward(aim: Vec, power: number, kicker: PlayerEntity) {
+  private kickBallToward(
+    aim: Vec,
+    power: number,
+    kicker: PlayerEntity,
+    loft = 0,
+  ) {
     const dx = aim.x - this.ball.x;
     const dy = aim.y - this.ball.y;
     const l = len(dx, dy);
     this.ball.vx = (dx / l) * power;
     this.ball.vy = (dy / l) * power;
+    // `loft` is the upward launch velocity (px/s). Pop the ball just off the
+    // turf so it leaves the ground cleanly on a lofted kick.
+    this.ball.vz = loft;
+    if (loft > 0) this.ball.z = Math.max(this.ball.z, 0.5);
     this.afterKick(kicker);
   }
 
@@ -1465,6 +1502,13 @@ export class PitchKickGame {
   private resolvePossession() {
     const prev = this.owner;
 
+    // A ball above chest height flies over everyone — nobody can trap it
+    // until it drops back down (FIFA: lofted balls sail past players).
+    if (this.ball.z > CONTROL_HEIGHT) {
+      this.owner = null;
+      return;
+    }
+
     let best: PlayerEntity | null = null;
     let bestD = Infinity;
     for (const p of [...this.homePlayers, ...this.awayPlayers]) {
@@ -1540,6 +1584,8 @@ export class PitchKickGame {
     const snap = this.stealProtect > 0 ? 0.55 : 0.3;
     this.ball.x += (targetX - this.ball.x) * snap;
     this.ball.y += (targetY - this.ball.y) * snap;
+    this.ball.z = 0;
+    this.ball.vz = 0;
     this.ball.vx = owner.vx;
     this.ball.vy = owner.vy;
   }
@@ -1576,10 +1622,30 @@ export class PitchKickGame {
     this.ball.x += this.ball.vx * dt;
     this.ball.y += this.ball.vy * dt;
 
-    const decay = Math.exp(-BALL_DECAY * dt);
+    // ---- Height (z) integration: gravity + ground bounce ----
+    const airborne = this.ball.z > 0.01 || this.ball.vz > 0.01;
+    if (airborne) {
+      this.ball.vz -= GRAVITY * dt;
+      this.ball.z += this.ball.vz * dt;
+      if (this.ball.z <= 0) {
+        // Landed: bounce with restitution; settle when the hop gets tiny.
+        this.ball.z = 0;
+        if (this.ball.vz < 0) this.ball.vz = -this.ball.vz * BOUNCE;
+        if (this.ball.vz < GRAVITY * 0.03) this.ball.vz = 0;
+        // A bounce scrubs a little pace off the roll.
+        this.ball.vx *= 0.86;
+        this.ball.vy *= 0.86;
+      }
+    }
+
+    // Horizontal friction: almost none while flying, full rolling drag on
+    // the grass. A lofted ball carries; a grounded ball decays as before.
+    const decay = airborne
+      ? Math.exp(-BALL_DECAY * 0.12 * dt)
+      : Math.exp(-BALL_DECAY * dt);
     this.ball.vx *= decay;
     this.ball.vy *= decay;
-    if (Math.hypot(this.ball.vx, this.ball.vy) < 4) {
+    if (!airborne && Math.hypot(this.ball.vx, this.ball.vy) < 4) {
       this.ball.vx = 0;
       this.ball.vy = 0;
     }
@@ -1607,6 +1673,8 @@ export class PitchKickGame {
   private handleGoals() {
     const inMouth = this.ball.y > goalTop && this.ball.y < goalBottom;
     if (!inMouth) return;
+    // Over the bar — a ball higher than the crossbar (2.44 m) isn't a goal.
+    if (this.ball.z > M(2.44)) return;
 
     if (this.ball.x <= 2) {
       this.awayScore += 1;
@@ -2062,16 +2130,22 @@ export class PitchKickGame {
 
   private drawBall(ctx: CanvasRenderingContext2D) {
     const q = proj(this.ball.x, this.ball.y);
-    const r = this.ball.r * q.s * 0.95;
+    const z = this.ball.z;
+    // Height in screen pixels (same projection scale as horizontal distance).
+    const lift = z * q.s;
+    // The ball appears a touch bigger the higher (closer to camera) it flies.
+    const r = this.ball.r * q.s * 0.95 * (1 + Math.min(z, M(8)) * 0.012);
 
-    // Shadow.
-    ctx.fillStyle = 'rgba(0,0,0,0.3)';
+    // Shadow on the grass at the ground point — shrinks + fades as the ball
+    // climbs, so height reads clearly even on a flat field.
+    const hf = 1 / (1 + z * 0.03);
+    ctx.fillStyle = `rgba(0,0,0,${0.32 * hf})`;
     ctx.beginPath();
-    ctx.ellipse(q.x + 2, q.y + 1.5, r * 1.05, r * 0.4, 0, 0, Math.PI * 2);
+    ctx.ellipse(q.x + 2 + lift * 0.12, q.y + 1.5, r * 1.05 * hf, r * 0.4 * hf, 0, 0, Math.PI * 2);
     ctx.fill();
 
-    // Ball sits slightly above its ground point.
-    const by = q.y - r * 0.7;
+    // Ball sits slightly above its ground point, plus its airborne height.
+    const by = q.y - r * 0.7 - lift;
     const grad = ctx.createRadialGradient(q.x - r * 0.35, by - r * 0.35, r * 0.2, q.x, by, r);
     grad.addColorStop(0, '#ffffff');
     grad.addColorStop(1, '#c9ced6');
