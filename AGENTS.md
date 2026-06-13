@@ -212,9 +212,9 @@ game state yet (no Stores/queries for gameplay).
   r=M(9.15), penalty box M(16.5)deep×M(40.32)wide, six-yard M(5.5)×M(18.32),
   penalty spot M(11) from goal, corner arc M(1), spot dots M(0.12).
   GOAL_HEIGHT=M(7.32)≈153 (mouth width), GOAL_DEPTH=M(2.0)≈42, goal posts
-  M(2.44) tall. PLAYER_R=M(0.52)≈11, BALL_R=M(0.32)≈6.7 (closer to FIFA's
-  true small scale per user; height renderer grows it as it rises so airborne
-  balls stay readable),
+  M(2.44) tall. PLAYER_R=M(0.52)≈11, BALL_R=M(0.11)≈2.3 (TRUE real-life
+  scale per user — 0.22m ball; deliberately tiny; height renderer grows it as
+  it rises so airborne balls stay readable),
   CONTROL_DIST=PLAYER_R+BALL_R+16. Sprite: `PLAYER_SCALE=M(1.85)/44` applied
   in drawHumanoid (ground decos use `gs=s*PLAYER_SCALE`; body `ctx.scale(gs,
   gs)`; head markers at q.y-50*gs) → footballer stands ~1.85m.

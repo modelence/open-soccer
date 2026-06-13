@@ -59,10 +59,10 @@ const goalBottom = FIELD_H / 2 + GOAL_HEIGHT / 2;
 // A player's ground footprint ≈ 0.5 m radius; a regulation ball is 0.22 m
 // across (0.11 m radius) — genuinely small next to a footballer.
 const PLAYER_R = Math.round(M(0.52)); // ≈ 11
-// Closer to FIFA's true scale: a real ball is 0.22 m across. We draw it a
-// touch generous (0.32 m radius ≈ 6.7 px) so it stays trackable when grounded,
-// but the height renderer grows it as it rises so airborne balls read clearly.
-const BALL_R = M(0.32);
+// True real-life scale: a regulation ball is 0.22 m across → 0.11 m radius
+// (≈ 2.3 px next to a 1.85 m player). Genuinely small, exactly as in life.
+// The height renderer grows it as it rises so airborne balls stay readable.
+const BALL_R = M(0.11);
 // The upright sprite is drawn 44 internal units tall; scale it so a footballer
 // stands ~1.85 m in true world pixels (keeps player:ball:goal proportions).
 const PLAYER_SCALE = M(1.85) / 44;
