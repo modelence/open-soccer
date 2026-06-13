@@ -126,9 +126,12 @@ game state yet (no Stores/queries for gameplay).
 - LEG/BOOT THICKNESS audited to true scale (1 local unit ≈0.042m): thigh
   lineWidth 3.3 (~0.14m), shin 2.8 (~0.11m calf), sock tapers 2.5→1.9 toward
   the ankle (~0.07m), knee dot 1.5, boot ellipse 3.5×1.4 + accent 1.3×0.5.
-  NOTE: ball is ALREADY true-scale (diameter ≈4.38×s px) and is slightly
-  BIGGER than a leg (thigh ≈2.9×s px) — when a user says "ball smaller than
-  legs" the fix is THINNER LEGS, not a bigger ball.
+  NOTE: ball PHYSICS radius BALL_R is true-scale, but the DRAWN ball is
+  oversized by BALL_VIS_SCALE=1.3 (≈5.7×s px diameter) — football games draw
+  the ball bigger than life so it's trackable. True-scale (4.38×s) read as
+  "too small" to the user across several rounds; collision still uses BALL_R.
+  Thigh ≈2.9×s px. When a user says "ball smaller than legs" prefer THINNER
+  LEGS, but the visual ball is now deliberately ~head-sized for playability.
 - LEGS are TWO-BONE IK (`drawLeg(footX,footY,lift,hipX,far)`): SEG=10.8
   thigh≈shin, knee solved at half hip→foot distance + perpendicular rigid
   offset (hgt=sqrt(SEG²-a²)) bent FORWARD (perp x-sign matched to facing),

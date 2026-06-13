@@ -82,6 +82,9 @@ const PLAYER_R = Math.round(M(0.52)); // ≈ 11
 // (≈ 2.3 px next to a 1.85 m player). Genuinely small, exactly as in life.
 // The height renderer grows it as it rises so airborne balls stay readable.
 const BALL_R = M(0.11);
+// Football games (incl. FIFA) draw the ball larger than life so it's trackable.
+// Physics/collision use the true BALL_R; only the rendered ball uses this factor.
+const BALL_VIS_SCALE = 1.3;
 // The upright sprite is drawn 44 internal units tall; scale it so a footballer
 // stands ~1.85 m in true world pixels (keeps player:ball:goal proportions).
 const PLAYER_SCALE = M(1.85) / 44;
@@ -2168,7 +2171,10 @@ export class PitchKickGame {
     // Height in screen pixels (same projection scale as horizontal distance).
     const lift = z * q.s;
     // The ball appears a touch bigger the higher (closer to camera) it flies.
-    const r = this.ball.r * q.s * 0.95 * (1 + Math.min(z, M(8)) * 0.012);
+    // BALL_VIS_SCALE oversizes the *drawn* ball ~30% over its true 0.22 m radius
+    // (collision/physics still use the real radius) — football games do this so
+    // the ball reads clearly and "feels" right, instead of being a tiny dot.
+    const r = this.ball.r * BALL_VIS_SCALE * q.s * (1 + Math.min(z, M(8)) * 0.012);
 
     // Shadow on the grass at the ground point — shrinks + fades as the ball
     // climbs, so height reads clearly even on a flat field.
