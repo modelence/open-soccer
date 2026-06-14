@@ -175,6 +175,8 @@ export interface HudState {
   /** Active player per side, for the bottom-corner broadcast lower-thirds. */
   homePlayer: { num: number; name: string } | null;
   awayPlayer: { num: number; name: string } | null;
+  /** 0..1 charge of the in-progress home kick, or null when not charging. */
+  charge: number | null;
 }
 
 type StateListener = (s: HudState) => void;
@@ -472,6 +474,7 @@ export class PitchKickGame {
       awayPlayer: this.awayActive
         ? { num: this.awayActive.num, name: this.awayActive.name }
         : null,
+      charge: this.chargeLevel(),
     });
   }
 
@@ -1935,70 +1938,8 @@ export class PitchKickGame {
 
     this.drawGoalFront(ctx, 'left');
     this.drawGoalFront(ctx, 'right');
-
-    this.drawPowerMeter(ctx);
-  }
-
-  /**
-   * FIFA-style shot/pass power meter: a fixed horizontal bar centred along
-   * the bottom of the screen (FIFA shows it bottom-centre, NOT above the
-   * player). Segmented chevron ticks fill left→right green→yellow→red as the
-   * kick charges. Only visible while a kick key is held.
-   */
-  private drawPowerMeter(ctx: CanvasRenderingContext2D) {
-    const charge = this.chargeLevel();
-    if (charge === null) return;
-
-    const w = 320;
-    const h = 16;
-    const x = (CANVAS_W - w) / 2;
-    const y = CANVAS_H - 34;
-    const r = h / 2;
-
-    ctx.save();
-
-    // Track (rounded, dark, subtle outline).
-    ctx.fillStyle = 'rgba(6,12,18,0.78)';
-    ctx.strokeStyle = 'rgba(255,255,255,0.18)';
-    ctx.lineWidth = 1.5;
-    ctx.beginPath();
-    ctx.roundRect(x, y, w, h, r);
-    ctx.fill();
-    ctx.stroke();
-
-    // Fill: clipped gradient (green → yellow → red across the whole bar so
-    // the colour reflects absolute power, like FIFA).
-    const fillW = Math.max(w * charge, h);
-    ctx.save();
-    ctx.beginPath();
-    ctx.roundRect(x, y, fillW, h, r);
-    ctx.clip();
-    const grad = ctx.createLinearGradient(x, 0, x + w, 0);
-    grad.addColorStop(0, '#39e639');
-    grad.addColorStop(0.5, '#ffe23a');
-    grad.addColorStop(0.8, '#ff8c1a');
-    grad.addColorStop(1, '#ff2e2e');
-    ctx.fillStyle = grad;
-    ctx.fillRect(x, y, w, h);
-    // Diagonal chevron ticks for a sporty meter look.
-    ctx.strokeStyle = 'rgba(0,0,0,0.28)';
-    ctx.lineWidth = 2;
-    for (let sx = x - h; sx < x + w; sx += 12) {
-      ctx.beginPath();
-      ctx.moveTo(sx, y + h);
-      ctx.lineTo(sx + h, y);
-      ctx.stroke();
-    }
-    ctx.restore();
-
-    // "POWER" label above the bar.
-    ctx.fillStyle = 'rgba(255,255,255,0.82)';
-    ctx.font = '700 11px Oswald, sans-serif';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'alphabetic';
-    ctx.fillText('POWER', CANVAS_W / 2, y - 5);
-
-    ctx.restore();
+    // The power gauge is rendered in React as a thin fill line under the
+    // home player's name tag (bottom-left), fed by the HUD `charge` field.
   }
 
   /** Crowd dots + hoarding behind the far touchline, with camera parallax. */

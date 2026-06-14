@@ -52,8 +52,12 @@ game state yet (no Stores/queries for gameplay).
   `homePlayer` = `this.controlled`; `awayPlayer` = `this.awayActive` (away
   carrier, else outfield CPU nearest ball, computed in `updateAwayActive`).
   Above the head only the selection chevron is drawn (green=controlled,
-  red=awayActive, hollow=switchHint) — no name there. Separate from the
-  charge/power gauge (`chargeLevel` + chevron meter).
+  red=awayActive, hollow=switchHint) — no name there.
+- Shot/pass power gauge: rendered in React as a thin (h-1) fill line directly
+  UNDER the home player's bottom-left `PlayerNameTag`, fed by HUD `charge`
+  (0..1 or null) from `chargeLevel()`. Gradient green->yellow->red, width
+  animates with charge, hidden when not charging. The old canvas bottom-center
+  `drawPowerMeter` segmented bar was removed.
 - Match clock: counts UP like a real soccer clock (0:00 -> 90:00), accelerated.
   Engine tracks real `elapsed` secs; `MATCH_REAL_SECS=180` real seconds maps to
   `MATCH_DISPLAY_SECS=5400` (90'). HUD field is `clock` (in-game secs);

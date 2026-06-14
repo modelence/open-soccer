@@ -37,6 +37,7 @@ export default function HomePage() {
     possession: 'none',
     homePlayer: null,
     awayPlayer: null,
+    charge: null,
   });
 
   useEffect(() => {
@@ -128,6 +129,7 @@ export default function HomePage() {
             accent="bg-home-500"
             num={hud.homePlayer.num}
             name={hud.homePlayer.name}
+            charge={hud.charge}
           />
         )}
         {started && hud.awayPlayer && (
@@ -210,29 +212,49 @@ function PlayerNameTag({
   accent,
   num,
   name,
+  charge,
 }: {
   side: 'left' | 'right';
   accent: string;
   num: number;
   name: string;
+  charge?: number | null;
 }) {
+  const showCharge = charge != null;
   return (
     <div
       className={`absolute bottom-3 ${
         side === 'left' ? 'left-3' : 'right-3'
-      } flex items-stretch h-9 rounded-md overflow-hidden shadow-lg shadow-black/40 bg-night-950/95 font-heading select-none animate-fade-in`}
+      } rounded-md overflow-hidden shadow-lg shadow-black/40 bg-night-950/95 font-heading select-none animate-fade-in`}
     >
-      {/* Team colour bar on the outer edge of the tag. */}
-      {side === 'left' && <span className={`w-1.5 self-stretch ${accent}`} />}
-      <span
-        className={`flex items-center px-2.5 text-white text-sm tabular-nums font-display ${accent} bg-opacity-100`}
-      >
-        {num}
-      </span>
-      <span className="flex items-center px-3 text-white uppercase tracking-wider text-sm font-bold">
-        {name}
-      </span>
-      {side === 'right' && <span className={`w-1.5 self-stretch ${accent}`} />}
+      <div className="flex items-stretch h-9">
+        {/* Team colour bar on the outer edge of the tag. */}
+        {side === 'left' && <span className={`w-1.5 self-stretch ${accent}`} />}
+        <span
+          className={`flex items-center px-2.5 text-white text-sm tabular-nums font-display ${accent} bg-opacity-100`}
+        >
+          {num}
+        </span>
+        <span className="flex items-center px-3 text-white uppercase tracking-wider text-sm font-bold">
+          {name}
+        </span>
+        {side === 'right' && <span className={`w-1.5 self-stretch ${accent}`} />}
+      </div>
+      {/* Thin shot/pass power fill, right under the name label. The track is
+          always reserved (so the tag doesn't jump); the fill only shows while
+          charging. Colour ramps green -> yellow -> red with power. */}
+      <div className="h-1 w-full bg-night-800">
+        {showCharge && (
+          <div
+            className="h-full transition-[width] duration-75 ease-linear"
+            style={{
+              width: `${Math.round((charge as number) * 100)}%`,
+              background:
+                'linear-gradient(90deg,#39e639 0%,#ffe23a 55%,#ff8c1a 80%,#ff2e2e 100%)',
+            }}
+          />
+        )}
+      </div>
     </div>
   );
 }
