@@ -40,8 +40,14 @@ game state yet (no Stores/queries for gameplay).
   overlay, GOAL flash, and the controls legend. Instantiates the engine in a
   `useEffect` keyed on `started`/`gameKey`. The scoreboard is a compact
   FIFA-style overlay pill (`absolute top-3 left-3` inside the pitch container):
-  `[YOU tab][home]–[away][CPU tab][clock]`, with possession shown as a colored
-  dot inside each `ScoreTab`. No longer a separate row above the field.
+  `[home bar][YOU][home]–[away][CPU][away bar][clock]`. Team colours sit on the
+  OUTER edges of the score block (home far-left, away right of CPU). No live
+  possession indicator (FIFA's score bug doesn't show one; on-pitch selected
+  marker conveys who has the ball).
+- Match clock: counts UP like a real soccer clock (0:00 -> 90:00), accelerated.
+  Engine tracks real `elapsed` secs; `MATCH_REAL_SECS=180` real seconds maps to
+  `MATCH_DISPLAY_SECS=5400` (90'). HUD field is `clock` (in-game secs);
+  `fmtTime` renders MM:SS. Full time fires at `elapsed >= MATCH_REAL_SECS`.
 
 ### Controls (FIFA PC style)
 - Arrows = move, E = sprint, D = shot, S = short pass, A = long pass,

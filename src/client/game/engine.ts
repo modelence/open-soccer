@@ -126,6 +126,12 @@ const CHARGE_FULL = 0.8;
 // you receive it (a "first-time" kick), instead of being dropped.
 const KICK_BUFFER = 0.5;
 
+// Match clock: a real soccer clock that counts UP to the full match length,
+// accelerated FIFA-style. The match displays 0:00 -> 90:00 (in-game minutes)
+// but only lasts MATCH_REAL_SECS of real play. accel = 5400 / MATCH_REAL_SECS.
+const MATCH_DISPLAY_SECS = 90 * 60; // 90' shown on the clock at full time
+const MATCH_REAL_SECS = 180; // real seconds a match actually lasts
+
 /** How quickly velocity approaches the desired velocity (per second). */
 const ACCEL = 8;
 /** Max turn rate in radians per second. */
@@ -160,7 +166,8 @@ interface PlayerEntity {
 export interface HudState {
   homeScore: number;
   awayScore: number;
-  timeLeft: number;
+  /** In-game match seconds elapsed (counts UP, 0 -> 5400 = 90:00). */
+  clock: number;
   message: string;
   possession: Team | 'none';
 }
@@ -296,7 +303,8 @@ export class PitchKickGame {
 
   private homeScore = 0;
   private awayScore = 0;
-  private timeLeft = 120;
+  /** Real seconds of play elapsed; drives the accelerated match clock. */
+  private elapsed = 0;
   private message = '';
   private messageTimer = 0;
   private freeze = 0;
@@ -433,7 +441,10 @@ export class PitchKickGame {
     this.listener({
       homeScore: this.homeScore,
       awayScore: this.awayScore,
-      timeLeft: Math.max(0, Math.ceil(this.timeLeft)),
+      clock: Math.min(
+        MATCH_DISPLAY_SECS,
+        Math.floor((this.elapsed / MATCH_REAL_SECS) * MATCH_DISPLAY_SECS),
+      ),
       message: this.message,
       possession: this.owner ? this.owner.team : 'none',
     });
@@ -541,10 +552,10 @@ export class PitchKickGame {
       return;
     }
 
-    if (this.timeLeft > 0) {
-      this.timeLeft -= dt;
-      if (this.timeLeft <= 0) {
-        this.timeLeft = 0;
+    if (this.elapsed < MATCH_REAL_SECS) {
+      this.elapsed += dt;
+      if (this.elapsed >= MATCH_REAL_SECS) {
+        this.elapsed = MATCH_REAL_SECS;
         const verdict =
           this.homeScore > this.awayScore
             ? 'FULL TIME — YOU WIN!'

@@ -32,7 +32,7 @@ export default function HomePage() {
   const [hud, setHud] = useState<HudState>({
     homeScore: 0,
     awayScore: 0,
-    timeLeft: 120,
+    clock: 0,
     message: '',
     possession: 'none',
   });
@@ -89,10 +89,15 @@ export default function HomePage() {
         />
 
         {/* FIFA-style broadcast scoreboard — compact pill overlaid on the
-            pitch (top-left), instead of a full row above the field. */}
+            pitch (top-left). Team colours sit on the OUTER edges of the score
+            block; an accelerated match clock counts up beside it. */}
         {started && (
           <div className="absolute top-3 left-3 flex items-stretch h-9 rounded-md overflow-hidden shadow-lg shadow-black/40 font-heading select-none animate-fade-in text-sm">
-            <ScoreTab label="YOU" accent="bg-home-500" active={hud.possession === 'home'} />
+            {/* home colour — far-left outer edge */}
+            <span className="w-1.5 self-stretch bg-home-500" />
+            <span className="flex items-center pl-2 pr-1.5 bg-night-950/95 text-white uppercase tracking-wider text-xs font-bold">
+              YOU
+            </span>
             <span className="flex items-center px-2.5 bg-night-950/95 text-white text-base tabular-nums font-display">
               {hud.homeScore}
             </span>
@@ -102,9 +107,13 @@ export default function HomePage() {
             <span className="flex items-center px-2.5 bg-night-950/95 text-white text-base tabular-nums font-display">
               {hud.awayScore}
             </span>
-            <ScoreTab label="CPU" accent="bg-away-500" active={hud.possession === 'away'} />
+            <span className="flex items-center pl-1.5 pr-2 bg-night-950/95 text-white uppercase tracking-wider text-xs font-bold">
+              CPU
+            </span>
+            {/* away colour — outer edge of the score block */}
+            <span className="w-1.5 self-stretch bg-away-500" />
             <span className="flex items-center px-2.5 bg-volt-500 text-night-950 text-sm tabular-nums font-bold tracking-tight">
-              {fmtTime(hud.timeLeft)}
+              {fmtTime(hud.clock)}
             </span>
           </div>
         )}
@@ -172,30 +181,5 @@ export default function HomePage() {
         <span className="text-volt-400">Q</span> to jump to the hinted ▽ player.
       </p>
     </div>
-  );
-}
-
-function ScoreTab({
-  label,
-  accent,
-  active,
-}: {
-  label: string;
-  accent: string;
-  active: boolean;
-}) {
-  return (
-    <span className="flex items-center bg-night-950/95">
-      {/* Team colour bar — brightens with a possession dot when active. */}
-      <span className={`w-1 self-stretch ${accent}`} />
-      <span className="flex items-center gap-1.5 pl-2 pr-2.5 text-white uppercase tracking-wider text-xs font-bold">
-        {label}
-        <span
-          className={`w-1.5 h-1.5 rounded-full transition-opacity ${
-            active ? `${accent} opacity-100` : 'bg-night-700 opacity-40'
-          }`}
-        />
-      </span>
-    </span>
   );
 }
