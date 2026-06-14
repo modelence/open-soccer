@@ -120,7 +120,7 @@ const BALL_DECAY = 1.5;
 
 /** Seconds of holding a kick key for a full power gauge (FIFA-style:
  *  press charges, release kicks; a tap = minimum power). */
-const CHARGE_FULL = 0.8;
+const CHARGE_FULL = 0.5;
 // FIFA-style input buffering: a shot/pass pressed while the ball is still
 // travelling to your player is remembered for this long and fired the instant
 // you receive it (a "first-time" kick), instead of being dropped.
@@ -969,13 +969,12 @@ export class PitchKickGame {
       }
     }
 
-    // Charge controls shot power across a wide, clearly-felt range:
-    // a tap is a soft placed side-foot (keeper-savable, can fall short from
-    // distance), a full bar is a blast. ~3x spread so the gauge matters.
-    // Harder shots rise more — a full blast lifts toward the top corners,
-    // while a placed side-foot stays low and grounded.
+    // Charge controls shot power across a clearly-felt range: even an
+    // untapped shot has real pace (strong base), and a full bar is a blast
+    // (~2.2x the base). Harder shots rise more — a full blast lifts toward
+    // the top corners, while a placed side-foot stays low and grounded.
     const loft = M(0.6) + charge * M(7);
-    this.kickBallToward({ x: goalX, y: bestY }, 430 + 870 * charge, kicker, loft);
+    this.kickBallToward({ x: goalX, y: bestY }, 620 + 720 * charge, kicker, loft);
   }
 
   private passAssisted(
