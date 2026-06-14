@@ -58,9 +58,10 @@ game state yet (no Stores/queries for gameplay).
   for UI, outfield `kit` + `gkKit`, `kickoffFwd`, and 11 `players`
   {num,name,pos}; index 0 = GK). `types.ts` defines the model + `buildSquad()`
   (pairs a roster with a shared formation template); `formations.ts` holds
-  position templates `F_433` / `F_4231` (fractions, attacking RIGHT). `index.ts`
-  exports the `TEAMS` array (the selectable roster). CURRENTLY 4 teams:
-  Argentina, France, Spain, England (top-4; more WC2026 nations to be added).
+  position templates `F_433` / `F_4231` / `F_442` / `F_352` / `F_343` (fractions,
+  attacking RIGHT). `index.ts` exports the `TEAMS` array (the selectable roster).
+  CURRENTLY 48 WC2026 nations (UEFA, CONMEBOL, CONCACAF, AFC, CAF, OFC) — one file
+  each, grouped by confederation in `index.ts`.
   The ENGINE is team-agnostic: `new PitchKickGame(canvas, listener, homeTeam,
   awayTeam)` builds the match from the two `TeamData` (away mirrored on x),
   stores `this.homeTeam`/`this.awayTeam`, and uses them for names/numbers/kits
