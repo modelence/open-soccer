@@ -2677,26 +2677,13 @@ export class PitchKickGame {
     // Markers above the head (screen space; tracks the scaled body height).
     const topY = q.y - 50 * gs;
     if (p === this.controlled) {
-      // Home selected player: filled chevron + name plate (FIFA indicator).
-      ctx.fillStyle = '#c6ff2e';
-      ctx.beginPath();
-      ctx.moveTo(q.x, topY);
-      ctx.lineTo(q.x - 6.5, topY - 10);
-      ctx.lineTo(q.x + 6.5, topY - 10);
-      ctx.closePath();
-      ctx.fill();
-      this.drawNamePlate(ctx, q.x, topY - 12, p, '#c6ff2e', '#11210a');
+      // Home selected player: name tag whose pointer aims at the head.
+      this.drawNameTag(ctx, q.x, topY, p, '#c6ff2e', '#11210a');
     } else if (p === this.awayActive) {
-      // CPU active player: red chevron + name plate.
-      ctx.fillStyle = '#ff4d4d';
-      ctx.beginPath();
-      ctx.moveTo(q.x, topY);
-      ctx.lineTo(q.x - 6.5, topY - 10);
-      ctx.lineTo(q.x + 6.5, topY - 10);
-      ctx.closePath();
-      ctx.fill();
-      this.drawNamePlate(ctx, q.x, topY - 12, p, '#ff4d4d', '#2a0808');
+      // CPU active player: red name tag.
+      this.drawNameTag(ctx, q.x, topY, p, '#ff4d4d', '#2a0808');
     } else if (p === this.switchHint) {
+      // Q-switch hint stays a simple hollow chevron (no name).
       ctx.strokeStyle = 'rgba(198,255,46,0.8)';
       ctx.lineWidth = 2;
       ctx.beginPath();
@@ -2708,13 +2695,14 @@ export class PitchKickGame {
     }
   }
 
-  /** FIFA-style name plate: a small coloured pill with the player's number
-   *  and surname, drawn just above the selection chevron. `by` is the pill's
-   *  bottom y in screen space; the pill grows upward from there. */
-  private drawNamePlate(
+  /** FIFA-style selected-player tag: a single connected marker — a coloured
+   *  pill with the player's number + surname and a downward pointer at its
+   *  base that aims at the player's head (like a map pin). `ay` is the head-top
+   *  y in screen space; the pointer tip sits there and the pill grows upward. */
+  private drawNameTag(
     ctx: CanvasRenderingContext2D,
     cx: number,
-    by: number,
+    ay: number,
     p: PlayerEntity,
     bg: string,
     fg: string,
@@ -2726,17 +2714,24 @@ export class PitchKickGame {
     ctx.textBaseline = 'middle';
     const padX = 7;
     const h = 16;
+    const tail = 6; // height of the downward pointer
     const w = ctx.measureText(label).width + padX * 2;
     const x = cx - w / 2;
-    const y = by - h;
+    const yb = ay - tail; // pill bottom edge (pointer tip is at ay)
+    const y = yb - h; // pill top edge
     const r = h / 2;
-    // Pill background.
+    // Pill + integrated downward pointer, as one path.
     ctx.beginPath();
     ctx.moveTo(x + r, y);
-    ctx.arcTo(x + w, y, x + w, y + h, r);
-    ctx.arcTo(x + w, y + h, x, y + h, r);
-    ctx.arcTo(x, y + h, x, y, r);
-    ctx.arcTo(x, y, x + w, y, r);
+    ctx.arcTo(x + w, y, x + w, yb, r);
+    ctx.lineTo(x + w, yb - r); // right edge down to corner radius
+    ctx.arcTo(x + w, yb, x + w - r, yb, r);
+    ctx.lineTo(cx + tail, yb); // toward the pointer base (right side)
+    ctx.lineTo(cx, ay); // pointer tip at the head
+    ctx.lineTo(cx - tail, yb); // pointer base (left side)
+    ctx.arcTo(x, yb, x, yb - r, r);
+    ctx.lineTo(x, y + r);
+    ctx.arcTo(x, y, x + r, y, r);
     ctx.closePath();
     ctx.fillStyle = bg;
     ctx.shadowColor = 'rgba(0,0,0,0.45)';

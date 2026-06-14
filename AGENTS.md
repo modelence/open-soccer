@@ -46,9 +46,11 @@ game state yet (no Stores/queries for gameplay).
   marker conveys who has the ball).
 - Player names: each `PlayerEntity` has a `name` (surname) from `HOME_NAMES` /
   `AWAY_NAMES` (indexed by formation slot). FIFA-style selected-player
-  indicator: a coloured name plate (`drawNamePlate`, `num + NAME`) sits above
-  the chevron on BOTH teams' active players — green for `this.controlled`
-  (home), red for `this.awayActive` (CPU). `awayActive` = away carrier, else
+  indicator: a single connected name tag (`drawNameTag`, `num + NAME`) — a
+  coloured pill with a downward pointer at its base aiming at the head (map-pin
+  style, NOT a name stacked above a separate chevron) — on BOTH teams' active
+  players: green for `this.controlled` (home), red for `this.awayActive` (CPU).
+  The Q-switch hint stays a plain hollow chevron (no name). `awayActive` = away carrier, else
   outfield CPU nearest the ball (computed each frame in `updateAwayActive`).
   This is separate from the charge/power gauge (`chargeLevel` + chevron meter).
 - Match clock: counts UP like a real soccer clock (0:00 -> 90:00), accelerated.
