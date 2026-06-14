@@ -1009,23 +1009,24 @@ export class PitchKickGame {
       // straight at the opponent goal when they're standing still.
       const atkX = kicker.team === 'home' ? 1 : -1;
       const sp = Math.hypot(target.vx, target.vy);
+      // Direction to play the ball into: always lead toward goal, blended
+      // with the receiver's actual run so a sprinter gets played in behind
+      // along their line and a standing player gets pushed forward.
       let rx = atkX;
       let ry = 0;
       if (sp > 50) {
-        rx = target.vx / sp;
+        rx = target.vx / sp + atkX * 0.6;
         ry = target.vy / sp;
         // Never lead a through ball backwards.
-        if (rx * atkX < 0.1) {
-          rx = atkX * 0.55;
-          const rl = len(rx, ry);
-          rx /= rl;
-          ry /= rl;
-        }
+        if (rx * atkX < 0.1) rx = atkX * 0.55;
+        const rl = len(rx, ry);
+        rx /= rl;
+        ry /= rl;
       }
-      // Lead proportional to how fast they're actually running (~0.45s of
-      // their motion), so a standing player gets a short ball to step onto
-      // and only a sprinter gets played properly in behind.
-      const lead = clamp(sp * 0.45, 45, 110);
+      // Always carve out a clear gap in front of the receiver (FIFA through
+      // ball): a fixed forward lead plus extra for how fast they're running,
+      // so even a standing player has real space to chase onto.
+      const lead = clamp(M(6) + sp * 0.45, M(6), M(13));
       aim = {
         x: clamp(target.x + rx * lead, 30, FIELD_W - 30),
         y: clamp(target.y + ry * lead, 20, FIELD_H - 20),
