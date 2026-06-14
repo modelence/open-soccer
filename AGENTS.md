@@ -44,6 +44,13 @@ game state yet (no Stores/queries for gameplay).
   OUTER edges of the score block (home far-left, away right of CPU). No live
   possession indicator (FIFA's score bug doesn't show one; on-pitch selected
   marker conveys who has the ball).
+- Player names: each `PlayerEntity` has a `name` (surname) from `HOME_NAMES` /
+  `AWAY_NAMES` (indexed by formation slot). FIFA-style selected-player
+  indicator: a coloured name plate (`drawNamePlate`, `num + NAME`) sits above
+  the chevron on BOTH teams' active players — green for `this.controlled`
+  (home), red for `this.awayActive` (CPU). `awayActive` = away carrier, else
+  outfield CPU nearest the ball (computed each frame in `updateAwayActive`).
+  This is separate from the charge/power gauge (`chargeLevel` + chevron meter).
 - Match clock: counts UP like a real soccer clock (0:00 -> 90:00), accelerated.
   Engine tracks real `elapsed` secs; `MATCH_REAL_SECS=180` real seconds maps to
   `MATCH_DISPLAY_SECS=5400` (90'). HUD field is `clock` (in-game secs);

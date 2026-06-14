@@ -161,6 +161,8 @@ interface PlayerEntity {
   role: Role;
   /** Shirt number, shown on the back of the jersey. */
   num: number;
+  /** Surname, shown in the FIFA-style selected-player indicator. */
+  name: string;
 }
 
 export interface HudState {
@@ -207,6 +209,16 @@ const HAIR_COLORS = ['#2b2118', '#0e0c0a', '#5a3b1e', '#857058'];
 const SKIN_TONES = ['#e0ac7e', '#c98c5e', '#8d5a3b', '#f0c49a'];
 // Shirt numbers by formation index (GK..STs).
 const SHIRT_NUMBERS = [1, 2, 5, 6, 3, 7, 8, 4, 11, 9, 10];
+// Surnames by formation index (GK..STs), one set per side. Shown in the
+// selected-player indicator above each team's active player.
+const HOME_NAMES = [
+  'KOVAC', 'REYES', 'OKAFOR', 'BJORN', 'SANTOS',
+  'FALCO', 'MENDES', 'PRICE', 'AMARI', 'VOLKOV', 'DUARTE',
+];
+const AWAY_NAMES = [
+  'HENNIG', 'OZAWA', 'BRUNO', 'KESSLER', 'NADAL',
+  'GRECO', 'OYELE', 'TANAKA', 'ROSSI', 'BAKER', 'SILVA',
+];
 
 interface Kit {
   shirt: string;
@@ -280,6 +292,9 @@ export class PitchKickGame {
   private controlled!: PlayerEntity;
   /** The player Q would switch to (rendered as a hollow marker). */
   private switchHint: PlayerEntity | null = null;
+  /** CPU's "active" player (carrier, else nearest to ball) — gets the away
+   *  selected-player indicator, mirroring FIFA showing both sides' names. */
+  private awayActive: PlayerEntity | null = null;
 
   private owner: PlayerEntity | null = null;
   private lastKicker: PlayerEntity | null = null;
@@ -347,6 +362,7 @@ export class PitchKickGame {
       isGK: i === 0,
       role: i === 0 ? 'GK' : i <= 4 ? 'DF' : i <= 8 ? 'MF' : 'ST',
       num: SHIRT_NUMBERS[i],
+      name: (team === 'home' ? HOME_NAMES : AWAY_NAMES)[i],
     };
   }
 
@@ -584,9 +600,22 @@ export class PitchKickGame {
     this.updateBall(dt);
     this.handleGoals();
     this.updateCamera(dt);
+    this.updateAwayActive();
 
     this.justPressed = [];
     this.justReleased = [];
+  }
+
+  /** The CPU player that should wear the away indicator: the carrier if the
+   *  away team has the ball, otherwise the outfield CPU nearest the ball.
+   *  Sticky to the carrier so the plate doesn't flicker between defenders. */
+  private updateAwayActive() {
+    if (this.owner && this.owner.team === 'away') {
+      this.awayActive = this.owner;
+      return;
+    }
+    const outfield = this.awayPlayers.filter((p) => !p.isGK);
+    this.awayActive = this.nearestTo(outfield, this.ball) ?? this.awayActive;
   }
 
   /** Pan the TV camera toward the ball (with a little velocity lookahead). */
@@ -2648,6 +2677,7 @@ export class PitchKickGame {
     // Markers above the head (screen space; tracks the scaled body height).
     const topY = q.y - 50 * gs;
     if (p === this.controlled) {
+      // Home selected player: filled chevron + name plate (FIFA indicator).
       ctx.fillStyle = '#c6ff2e';
       ctx.beginPath();
       ctx.moveTo(q.x, topY);
@@ -2655,6 +2685,17 @@ export class PitchKickGame {
       ctx.lineTo(q.x + 6.5, topY - 10);
       ctx.closePath();
       ctx.fill();
+      this.drawNamePlate(ctx, q.x, topY - 12, p, '#c6ff2e', '#11210a');
+    } else if (p === this.awayActive) {
+      // CPU active player: red chevron + name plate.
+      ctx.fillStyle = '#ff4d4d';
+      ctx.beginPath();
+      ctx.moveTo(q.x, topY);
+      ctx.lineTo(q.x - 6.5, topY - 10);
+      ctx.lineTo(q.x + 6.5, topY - 10);
+      ctx.closePath();
+      ctx.fill();
+      this.drawNamePlate(ctx, q.x, topY - 12, p, '#ff4d4d', '#2a0808');
     } else if (p === this.switchHint) {
       ctx.strokeStyle = 'rgba(198,255,46,0.8)';
       ctx.lineWidth = 2;
@@ -2665,5 +2706,47 @@ export class PitchKickGame {
       ctx.closePath();
       ctx.stroke();
     }
+  }
+
+  /** FIFA-style name plate: a small coloured pill with the player's number
+   *  and surname, drawn just above the selection chevron. `by` is the pill's
+   *  bottom y in screen space; the pill grows upward from there. */
+  private drawNamePlate(
+    ctx: CanvasRenderingContext2D,
+    cx: number,
+    by: number,
+    p: PlayerEntity,
+    bg: string,
+    fg: string,
+  ) {
+    const label = `${p.num} ${p.name}`;
+    ctx.save();
+    ctx.font = '700 11px ui-sans-serif, system-ui, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    const padX = 7;
+    const h = 16;
+    const w = ctx.measureText(label).width + padX * 2;
+    const x = cx - w / 2;
+    const y = by - h;
+    const r = h / 2;
+    // Pill background.
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.arcTo(x + w, y, x + w, y + h, r);
+    ctx.arcTo(x + w, y + h, x, y + h, r);
+    ctx.arcTo(x, y + h, x, y, r);
+    ctx.arcTo(x, y, x + w, y, r);
+    ctx.closePath();
+    ctx.fillStyle = bg;
+    ctx.shadowColor = 'rgba(0,0,0,0.45)';
+    ctx.shadowBlur = 4;
+    ctx.shadowOffsetY = 1;
+    ctx.fill();
+    ctx.shadowColor = 'transparent';
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = fg;
+    ctx.fillText(label, cx, y + h / 2 + 0.5);
+    ctx.restore();
   }
 }
