@@ -174,11 +174,10 @@ export default function HomePage() {
               </span>{' '}
               vs{' '}
               <span className="font-semibold text-white">{TEAM_INFO.away.name}</span> —
-              full 11v11, the TV camera follows the ball. You control the{' '}
-              {TEAM_INFO.home.name} player with the solid{' '}
-              <span className="text-volt-400 font-semibold">▼</span>. A hollow ▽ hints
-              who <span className="text-volt-400 font-semibold">Q</span> will switch you
-              to — selection never changes on its own.
+              full 11v11, the TV camera follows the ball. Your active{' '}
+              {TEAM_INFO.home.name} player is named in the bottom-left tag. A hollow ▽
+              hints who <span className="text-volt-400 font-semibold">Q</span> will
+              switch you to — selection never changes on its own.
             </p>
             <button
               onClick={handleStart}
