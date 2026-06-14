@@ -1026,7 +1026,7 @@ export class PitchKickGame {
       // Always carve out a clear gap in front of the receiver (FIFA through
       // ball): a fixed forward lead plus extra for how fast they're running,
       // so even a standing player has real space to chase onto.
-      const lead = clamp(M(6) + sp * 0.45, M(6), M(13));
+      const lead = clamp(M(3) + sp * 0.4, M(3), M(7.5));
       aim = {
         x: clamp(target.x + rx * lead, 30, FIELD_W - 30),
         y: clamp(target.y + ry * lead, 20, FIELD_H - 20),
