@@ -15,6 +15,9 @@ export const MARGIN = 56;
 export const CANVAS_W = 1162;
 export const CANVAS_H = 700;
 
+import type { TeamData, Kit } from './teams/types';
+export type { TeamData } from './teams/types';
+
 /** Metres → field pixels. */
 const M = (m: number) => m * PX_PER_M;
 
@@ -193,90 +196,14 @@ const MOVE_KEYS = new Set([
   'Space',
 ]);
 
-// Real national-team line-ups. Index 0 is always the goalkeeper, indices
-// 1–4 are the back line (DF role), 5–8 the midfield (MF), 9–10 the forwards
-// (ST); KICKOFF_FWD (the central striker) takes the kickoff. Coordinates are
-// fractions of the field with the team attacking to the RIGHT — the away
-// side is mirrored horizontally when built.
-
-// Spain — 4-3-3 (Euro 2024 XI).
-const HOME_FORMATION: Vec[] = [
-  { x: 0.045, y: 0.5 }, // GK  Simón
-  { x: 0.17, y: 0.18 }, // RB  Carvajal
-  { x: 0.13, y: 0.4 }, //  CB  Le Normand
-  { x: 0.13, y: 0.6 }, //  CB  Laporte
-  { x: 0.17, y: 0.82 }, // LB  Cucurella
-  { x: 0.27, y: 0.5 }, //  DM  Rodri
-  { x: 0.37, y: 0.34 }, // CM  Pedri
-  { x: 0.37, y: 0.66 }, // CM  Olmo
-  { x: 0.5, y: 0.16 }, //  RW  Yamal
-  { x: 0.55, y: 0.5 }, //  ST  Morata
-  { x: 0.5, y: 0.84 }, //  LW  N. Williams
-];
-
-// Germany — 4-2-3-1 (Euro 2024 XI).
-const AWAY_FORMATION: Vec[] = [
-  { x: 0.045, y: 0.5 }, // GK  Neuer
-  { x: 0.17, y: 0.18 }, // RB  Kimmich
-  { x: 0.13, y: 0.4 }, //  CB  Tah
-  { x: 0.13, y: 0.6 }, //  CB  Rüdiger
-  { x: 0.17, y: 0.82 }, // LB  Mittelstädt
-  { x: 0.27, y: 0.38 }, // DM  Kroos
-  { x: 0.27, y: 0.62 }, // DM  Andrich
-  { x: 0.4, y: 0.5 }, //   AM  Gündoğan
-  { x: 0.47, y: 0.18 }, // RW  Wirtz
-  { x: 0.56, y: 0.5 }, //  ST  Havertz
-  { x: 0.47, y: 0.82 }, // LW  Musiala
-];
-const KICKOFF_FWD = 9;
+// Team line-ups are no longer hardcoded here — they come from the two
+// `TeamData` (home + away) passed into the engine. Each squad lists 11 players
+// (index 0 = GK) with formation positions as fractions of the field attacking
+// RIGHT; the away side is mirrored horizontally when built. See
+// `./teams/` for the per-country data.
 
 const HAIR_COLORS = ['#2b2118', '#0e0c0a', '#5a3b1e', '#857058'];
 const SKIN_TONES = ['#e0ac7e', '#c98c5e', '#8d5a3b', '#f0c49a'];
-// Real shirt numbers + surnames by formation index (GK..forwards), one set
-// per side. Shown on the broadcast lower-third name tags. Spain (home) vs
-// Germany (away), Euro 2024 line-ups.
-const HOME_NUMBERS = [23, 2, 3, 14, 24, 16, 8, 10, 19, 7, 17];
-const HOME_NAMES = [
-  'SIMÓN', 'CARVAJAL', 'LE NORMAND', 'LAPORTE', 'CUCURELLA',
-  'RODRI', 'PEDRI', 'OLMO', 'YAMAL', 'MORATA', 'WILLIAMS',
-];
-const AWAY_NUMBERS = [1, 6, 4, 2, 18, 8, 23, 21, 17, 7, 10];
-const AWAY_NAMES = [
-  'NEUER', 'KIMMICH', 'TAH', 'RÜDIGER', 'MITTELSTÄDT',
-  'KROOS', 'ANDRICH', 'GÜNDOĞAN', 'WIRTZ', 'HAVERTZ', 'MUSIALA',
-];
-
-/** Team identities for the scoreboard / name tags (single source of truth).
- *  `color` is the primary kit colour used for UI accents; `textColor` is a
- *  legible colour to draw on top of it. */
-export interface TeamInfo {
-  name: string;
-  abbr: string;
-  color: string;
-  textColor: string;
-}
-export const TEAM_INFO: { home: TeamInfo; away: TeamInfo } = {
-  home: { name: 'Spain', abbr: 'ESP', color: '#e10b1a', textColor: '#ffffff' },
-  away: { name: 'Germany', abbr: 'GER', color: '#f4f4f4', textColor: '#15171c' },
-};
-
-interface Kit {
-  shirt: string;
-  sleeve: string;
-  outline: string;
-}
-
-// Spain: red shirts, navy trim. Germany: white shirts, black trim.
-const HOME_KIT: Kit = { shirt: '#e10b1a', sleeve: '#b00813', outline: '#6e040b' };
-const AWAY_KIT: Kit = { shirt: '#f4f4f4', sleeve: '#d2d2d2', outline: '#2b2b2b' };
-// Keepers wear distinct kits, like real football.
-const HOME_GK_KIT: Kit = { shirt: '#ffb52e', sleeve: '#cc8512', outline: '#7a4d08' };
-const AWAY_GK_KIT: Kit = { shirt: '#27e0a6', sleeve: '#12a878', outline: '#0a5c42' };
-
-function kitFor(p: PlayerEntity): Kit {
-  if (p.isGK) return p.team === 'home' ? HOME_GK_KIT : AWAY_GK_KIT;
-  return p.team === 'home' ? HOME_KIT : AWAY_KIT;
-}
 
 function len(x: number, y: number) {
   return Math.hypot(x, y) || 1;
@@ -371,24 +298,36 @@ export class PitchKickGame {
 
   private listener: StateListener;
 
-  constructor(canvas: HTMLCanvasElement, listener: StateListener) {
+  /** Selected nations driving the match (lineups, names, numbers, kits). */
+  readonly homeTeam: TeamData;
+  readonly awayTeam: TeamData;
+
+  constructor(
+    canvas: HTMLCanvasElement,
+    listener: StateListener,
+    homeTeam: TeamData,
+    awayTeam: TeamData,
+  ) {
     const ctx = canvas.getContext('2d');
     if (!ctx) throw new Error('Canvas 2D context unavailable');
     this.ctx = ctx;
     this.listener = listener;
+    this.homeTeam = homeTeam;
+    this.awayTeam = awayTeam;
 
-    this.homePlayers = HOME_FORMATION.map((f, i) =>
-      this.makePlayer('home', f, i),
+    this.homePlayers = homeTeam.players.map((p, i) =>
+      this.makePlayer('home', p.pos, i),
     );
-    this.awayPlayers = AWAY_FORMATION.map((f, i) =>
-      this.makePlayer('away', { x: 1 - f.x, y: f.y }, i),
+    this.awayPlayers = awayTeam.players.map((p, i) =>
+      this.makePlayer('away', { x: 1 - p.pos.x, y: p.pos.y }, i),
     );
-    this.controlled = this.homePlayers[KICKOFF_FWD];
+    this.controlled = this.homePlayers[homeTeam.kickoffFwd];
 
     this.resetKickoff('home');
   }
 
   private makePlayer(team: Team, frac: Vec, i: number): PlayerEntity {
+    const squad = (team === 'home' ? this.homeTeam : this.awayTeam).players[i];
     return {
       x: frac.x * FIELD_W,
       y: frac.y * FIELD_H,
@@ -404,9 +343,14 @@ export class PitchKickGame {
       skin: SKIN_TONES[(i + (team === 'away' ? 1 : 0)) % SKIN_TONES.length],
       isGK: i === 0,
       role: i === 0 ? 'GK' : i <= 4 ? 'DF' : i <= 8 ? 'MF' : 'ST',
-      num: (team === 'home' ? HOME_NUMBERS : AWAY_NUMBERS)[i],
-      name: (team === 'home' ? HOME_NAMES : AWAY_NAMES)[i],
+      num: squad.num,
+      name: squad.name,
     };
+  }
+
+  private kitFor(p: PlayerEntity): Kit {
+    const t = p.team === 'home' ? this.homeTeam : this.awayTeam;
+    return p.isGK ? t.gkKit : t.kit;
   }
 
   // ---- lifecycle ----------------------------------------------------------
@@ -462,12 +406,13 @@ export class PitchKickGame {
     // Put the kicking team's forward on the ball.
     const fwd =
       kickingTeam === 'home'
-        ? this.homePlayers[KICKOFF_FWD]
-        : this.awayPlayers[KICKOFF_FWD];
+        ? this.homePlayers[this.homeTeam.kickoffFwd]
+        : this.awayPlayers[this.awayTeam.kickoffFwd];
     fwd.x = FIELD_W / 2 + (kickingTeam === 'home' ? -34 : 34);
     fwd.y = FIELD_H / 2;
 
-    if (kickingTeam === 'home') this.controlled = this.homePlayers[KICKOFF_FWD];
+    if (kickingTeam === 'home')
+      this.controlled = this.homePlayers[this.homeTeam.kickoffFwd];
 
     this.camX = FIELD_W / 2;
     this.camY = FIELD_H / 2;
@@ -624,9 +569,9 @@ export class PitchKickGame {
         this.elapsed = MATCH_REAL_SECS;
         const verdict =
           this.homeScore > this.awayScore
-            ? `FULL TIME — ${TEAM_INFO.home.name.toUpperCase()} WIN!`
+            ? `FULL TIME — ${this.homeTeam.name.toUpperCase()} WIN!`
             : this.homeScore < this.awayScore
-              ? `FULL TIME — ${TEAM_INFO.away.name.toUpperCase()} WIN!`
+              ? `FULL TIME — ${this.awayTeam.name.toUpperCase()} WIN!`
               : 'FULL TIME — DRAW';
         this.setMessage(verdict, 9999);
         this.freeze = 9999;
@@ -1924,7 +1869,7 @@ export class PitchKickGame {
 
     if (this.ball.x <= 2) {
       this.awayScore += 1;
-      this.setMessage(`${TEAM_INFO.away.name.toUpperCase()} SCORE`, 1.6);
+      this.setMessage(`${this.awayTeam.name.toUpperCase()} SCORE`, 1.6);
       this.resetKickoff('home');
     } else if (this.ball.x >= FIELD_W - 2) {
       this.homeScore += 1;
@@ -1967,7 +1912,7 @@ export class PitchKickGame {
       if (px < -60 || px > CANVAS_W + 60) continue;
       items.push({
         depth: p.y,
-        draw: () => this.drawHumanoid(ctx, p, kitFor(p)),
+        draw: () => this.drawHumanoid(ctx, p, this.kitFor(p)),
       });
     }
     items.push({ depth: this.ball.y, draw: () => this.drawBall(ctx) });

@@ -36,28 +36,41 @@ game state yet (no Stores/queries for gameplay).
   farScale=S_FAR*ZOOM.
   Players projected off-screen (±60px horizontally) are culled.
   Calls a `HudState` listener each frame to push score/time/possession to React.
-- `src/client/pages/HomePage.tsx` — hosts the canvas, scoreboard HUD, start
-  overlay, GOAL flash, and the controls legend. Instantiates the engine in a
-  `useEffect` keyed on `started`/`gameKey`. The scoreboard is a compact
-  FIFA-style overlay pill (`absolute top-3 left-3` inside the pitch container):
-  `[home bar][ESP][home]–[away][GER][away bar][clock]`. Team colours sit on the
-  OUTER edges of the score block (home far-left, away right of CPU). No live
-  possession indicator (FIFA's score bug doesn't show one; on-pitch selected
-  marker conveys who has the ball).
-- Real teams: SPAIN (home, 4-3-3) vs GERMANY (away, 4-2-3-1), Euro-2024 XIs.
-  `HOME_FORMATION`/`AWAY_FORMATION` hold each side's slot coords (index 0 GK,
-  1-4 DF, 5-8 MF, 9-10 FW; away mirrored on x). Real surnames + shirt numbers
-  in `HOME_NAMES`/`HOME_NUMBERS` and `AWAY_NAMES`/`AWAY_NUMBERS` (indexed by
-  slot). Kits: Spain red (`HOME_KIT`), Germany white (`AWAY_KIT`). Team identity
-  (name/abbr/UI colour/text colour) lives in the exported `TEAM_INFO` const —
-  single source of truth, imported by HomePage for scoreboard + name tags, and
-  used by the engine for GOAL / full-time messages. To change the matchup, edit
-  the FORMATION/NAMES/NUMBERS/KIT arrays + `TEAM_INFO`.
+- `src/client/pages/HomePage.tsx` — hosts the canvas, scoreboard HUD, intro +
+  team-select overlays, GOAL flash, and the controls legend. A `phase` state
+  drives everything: `'intro'` (Kick Off button) → `'select'` (team picker) →
+  `'playing'` (engine running). The engine is instantiated in a `useEffect`
+  keyed on `phase`/`gameKey`, passing the two selected `TeamData`. The
+  scoreboard is a compact FIFA pill (`absolute top-3 left-3`): `[home bar][abbr]
+  [home]–[away][abbr][away bar][clock]`, colours/abbrs from the selected teams.
+  Header shows Rematch (replay same teams) + Change teams (back to select) while
+  playing.
+- TEAM-SELECT SCREEN (FIFA-style, `phase==='select'`): two `TeamCrest` panels,
+  LEFT = you (home), RIGHT = CPU (away). One side is `activeSide` at a time
+  (home first). A window keydown effect (only mounted during select): ArrowLeft/
+  Right cycle the active side's team (wrapping; CPU skips the home pick so the
+  two differ); Enter / S / D confirm — home confirm locks (✓) and hands control
+  to the away side, away confirm sets `phase='playing'`. Selection held as
+  `homeIdx`/`awayIdx` into `TEAMS`. Crest shows abbr + formation on a team-colour
+  block, volt ring + pulsing chevrons when active.
+- TEAM DATA (per-country, small files): `src/client/game/teams/` — one file per
+  nation exporting a `TeamData` (name, abbr, formation string, color/textColor
+  for UI, outfield `kit` + `gkKit`, `kickoffFwd`, and 11 `players`
+  {num,name,pos}; index 0 = GK). `types.ts` defines the model + `buildSquad()`
+  (pairs a roster with a shared formation template); `formations.ts` holds
+  position templates `F_433` / `F_4231` (fractions, attacking RIGHT). `index.ts`
+  exports the `TEAMS` array (the selectable roster). CURRENTLY 4 teams:
+  Argentina, France, Spain, England (top-4; more WC2026 nations to be added).
+  The ENGINE is team-agnostic: `new PitchKickGame(canvas, listener, homeTeam,
+  awayTeam)` builds the match from the two `TeamData` (away mirrored on x),
+  stores `this.homeTeam`/`this.awayTeam`, and uses them for names/numbers/kits
+  (`kitFor` method) + GOAL / full-time messages. To add a nation: create its
+  file and append it to `TEAMS`.
 - Player names: each `PlayerEntity` has a `name` (surname) and real `num`. Names
   are shown as FIFA broadcast lower-thirds in the BOTTOM CORNERS (NOT above the
   player): home active player bottom-left, CPU active player bottom-right
-  (each tag's accent + number text colour come from `TEAM_INFO`) — `PlayerNameTag`
-  in HomePage, fed by HUD fields `homePlayer`/`awayPlayer` ({num,name}).
+  (each tag's accent + number text colour come from the selected team) —
+  `PlayerNameTag` in HomePage, fed by HUD fields `homePlayer`/`awayPlayer`.
   `homePlayer` = `this.controlled`; `awayPlayer` = `this.awayActive` (away
   carrier, else outfield CPU nearest ball, computed in `updateAwayActive`).
   Above the head: the human-controlled player wears a solid green chevron; the
@@ -236,10 +249,10 @@ game state yet (no Stores/queries for gameplay).
   180 / carry 165 / formation 140. Shot power 660, CPU shot 640.
 
 ### Gameplay model (current: 11v11)
-- Both teams: 11 players in a 4-4-2 (`FORMATION` fractions in engine.ts:
-  index 0 = GK, 1-4 DF, 5-8 MF, 9-10 ST). Away is x-mirrored.
-  `KICKOFF_FWD=9` (a striker) is the kickoff/initially-controlled player.
-- You = blue, attack right. Ball owner gets a lime ring.
+- Both teams: 11 players from the selected `TeamData.players` (index 0 = GK,
+  1-4 DF, 5-8 MF, 9-10 ST by index → `role`). Away is x-mirrored. Each team's
+  `kickoffFwd` (a striker) is the kickoff/initially-controlled player.
+- Home attacks right; ball owner gets a lime ring.
 - Non-controlled teammates hold formation, shifted by ball position
   (`formationTarget`: anchor + ball offset * 0.35x/0.25y).
 - GOALKEEPERS (basic, `isGK` flag on index 0; distinct kits via `kitFor`:
