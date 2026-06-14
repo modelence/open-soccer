@@ -1,7 +1,7 @@
 import { buildSquad, type TeamData } from './types';
 import { F_4231 } from './formations';
 
-// Austria — 4-2-3-1 (best-effort current XI).
+// Austria — 4-2-3-1.
 export const austria: TeamData = {
   name: 'Austria',
   abbr: 'AUT',
@@ -12,16 +12,16 @@ export const austria: TeamData = {
   gkKit: { shirt: '#2bd47a', sleeve: '#17a95c', outline: '#0a5f33' },
   kickoffFwd: 9,
   players: buildSquad(F_4231, [
-    { num: 1, name: 'PENTZ' },
-    { num: 21, name: 'POSCH' },
-    { num: 4, name: 'DANSO' },
-    { num: 15, name: 'WÖBER' },
-    { num: 17, name: 'PRASS' },
+    { num: 1, name: 'A. SCHLAGER' },
+    { num: 5, name: 'POSCH' },
+    { num: 3, name: 'DANSO' },
+    { num: 8, name: 'ALABA' },
+    { num: 16, name: 'MWENE' },
+    { num: 4, name: 'X. SCHLAGER' },
     { num: 6, name: 'SEIWALD' },
-    { num: 7, name: 'SCHMID' },
-    { num: 10, name: 'BAUMGARTNER' },
     { num: 9, name: 'SABITZER' },
-    { num: 24, name: 'GREGORITSCH' },
-    { num: 19, name: 'WIMMER' },
+    { num: 20, name: 'LAIMER' },
+    { num: 7, name: 'ARNAUTOVIĆ' },
+    { num: 24, name: 'WANNER' },
   ]),
 };

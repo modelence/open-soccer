@@ -1,7 +1,7 @@
 import { buildSquad, type TeamData } from './types';
 import { F_4231 } from './formations';
 
-// France — 4-2-3-1 (Deschamps era, best-effort current XI).
+// France — 4-2-3-1.
 export const france: TeamData = {
   name: 'France',
   abbr: 'FRA',
@@ -16,12 +16,12 @@ export const france: TeamData = {
     { num: 5, name: 'KOUNDÉ' },
     { num: 4, name: 'UPAMECANO' },
     { num: 17, name: 'SALIBA' },
-    { num: 22, name: 'T. HERNÁNDEZ' },
+    { num: 19, name: 'T. HERNANDEZ' },
     { num: 8, name: 'TCHOUAMÉNI' },
-    { num: 13, name: 'KANTÉ' },
-    { num: 7, name: 'GRIEZMANN' },
-    { num: 11, name: 'DEMBÉLÉ' },
-    { num: 9, name: 'KOLO MUANI' },
+    { num: 6, name: 'KONÉ' },
+    { num: 11, name: 'OLISE' },
+    { num: 7, name: 'DEMBÉLÉ' },
     { num: 10, name: 'MBAPPÉ' },
+    { num: 9, name: 'THURAM' },
   ]),
 };

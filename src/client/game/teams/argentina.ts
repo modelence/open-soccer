@@ -1,7 +1,7 @@
 import { buildSquad, type TeamData } from './types';
 import { F_433 } from './formations';
 
-// Argentina — 4-3-3 (Scaloni era, best-effort current XI).
+// Argentina — 4-3-3.
 export const argentina: TeamData = {
   name: 'Argentina',
   abbr: 'ARG',
@@ -22,6 +22,6 @@ export const argentina: TeamData = {
     { num: 20, name: 'MAC ALLISTER' },
     { num: 10, name: 'MESSI' },
     { num: 9, name: 'ÁLVAREZ' },
-    { num: 11, name: 'N. GONZÁLEZ' },
+    { num: 22, name: 'LAUTARO' },
   ]),
 };

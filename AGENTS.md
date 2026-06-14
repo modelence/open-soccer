@@ -64,9 +64,19 @@ game state yet (no Stores/queries for gameplay).
   list June 2026) — one file each, grouped by confederation in `index.ts`:
   UEFA 16, CAF 10, AFC 9, CONMEBOL 6, CONCACAF 6, OFC 1. NOTE: Italy, Denmark,
   Ukraine, Poland, Serbia, Costa Rica, Jamaica, Nigeria, Cameroon did NOT qualify
-  (do not re-add). Squads are best-effort current XIs — names may drift from live
-  call-ups; the team LIST is authoritative but per-player rosters are not fully
-  verified.
+  (do not re-add — their files were deleted).
+  ROSTERS VERIFIED (June 2026): every team's 11-man XI was transcribed ONE BY ONE
+  from the official Wikipedia "2026 FIFA World Cup squads" page (real shirt numbers
+  + real current players, captains honoured, withdrawn/injured players excluded —
+  e.g. Germany has NEUER back as #1, no retired players like Kroos). The fetch
+  method: get section indices via the Wikipedia parse API
+  (`action=parse&page=2026_FIFA_World_Cup_squads&prop=sections`), then fetch each
+  team's wikitext by `&section=N`. Each XI is ordered GK→4DF→4MF→2FW to match the
+  engine's index→role mapping (i=0 GK, i≤4 DF, i≤8 MF, else ST; kickoffFwd=9 =
+  central striker). When two squad members share a surname, disambiguate with an
+  initial (e.g. `N. AL-DAWSARI`/`S. AL-DAWSARI`, `J. RODRÍGUEZ`, `I. SARR`).
+  Surnames UPPERCASE with diacritics preserved. DO NOT rewrite squads from memory —
+  always re-fetch the source if updating.
   The ENGINE is team-agnostic: `new PitchKickGame(canvas, listener, homeTeam,
   awayTeam)` builds the match from the two `TeamData` (away mirrored on x),
   stores `this.homeTeam`/`this.awayTeam`, and uses them for names/numbers/kits

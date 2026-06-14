@@ -1,7 +1,7 @@
 import { buildSquad, type TeamData } from './types';
 import { F_433 } from './formations';
 
-// Portugal — 4-3-3 (best-effort current XI).
+// Portugal — 4-3-3.
 export const portugal: TeamData = {
   name: 'Portugal',
   abbr: 'POR',
@@ -13,15 +13,15 @@ export const portugal: TeamData = {
   kickoffFwd: 9,
   players: buildSquad(F_433, [
     { num: 1, name: 'COSTA' },
-    { num: 20, name: 'CANCELO' },
-    { num: 3, name: 'PEPE' },
-    { num: 4, name: 'DIAS' },
-    { num: 19, name: 'MENDES' },
+    { num: 5, name: 'DALOT' },
+    { num: 3, name: 'DIAS' },
+    { num: 14, name: 'INÁCIO' },
+    { num: 25, name: 'N. MENDES' },
+    { num: 23, name: 'VITINHA' },
+    { num: 15, name: 'J. NEVES' },
     { num: 8, name: 'B. FERNANDES' },
-    { num: 6, name: 'PALHINHA' },
-    { num: 16, name: 'VITINHA' },
-    { num: 11, name: 'B. SILVA' },
+    { num: 10, name: 'B. SILVA' },
     { num: 7, name: 'RONALDO' },
-    { num: 21, name: 'L. FÉLIX' },
+    { num: 17, name: 'LEÃO' },
   ]),
 };

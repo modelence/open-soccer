@@ -1,7 +1,7 @@
 import { buildSquad, type TeamData } from './types';
 import { F_433 } from './formations';
 
-// Spain — 4-3-3 (Euro 2024 winning XI).
+// Spain — 4-3-3.
 export const spain: TeamData = {
   name: 'Spain',
   abbr: 'ESP',
@@ -12,16 +12,16 @@ export const spain: TeamData = {
   gkKit: { shirt: '#ffb52e', sleeve: '#cc8512', outline: '#7a4d08' },
   kickoffFwd: 9,
   players: buildSquad(F_433, [
-    { num: 23, name: 'SIMÓN' },
-    { num: 2, name: 'CARVAJAL' },
-    { num: 3, name: 'LE NORMAND' },
+    { num: 1, name: 'RAYA' },
+    { num: 12, name: 'PORRO' },
+    { num: 4, name: 'GARCÍA' },
     { num: 14, name: 'LAPORTE' },
     { num: 24, name: 'CUCURELLA' },
     { num: 16, name: 'RODRI' },
-    { num: 8, name: 'PEDRI' },
-    { num: 10, name: 'OLMO' },
+    { num: 20, name: 'PEDRI' },
+    { num: 6, name: 'MERINO' },
     { num: 19, name: 'YAMAL' },
-    { num: 7, name: 'MORATA' },
+    { num: 21, name: 'OYARZABAL' },
     { num: 17, name: 'WILLIAMS' },
   ]),
 };
