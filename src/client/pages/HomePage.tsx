@@ -352,10 +352,7 @@ function TeamCrest({
               <Check size={14} strokeWidth={3} />
             </span>
           )}
-          <KitJersey
-            kit={team.kit}
-            number={team.players[team.kickoffFwd]?.num ?? 9}
-          />
+          <KitJersey kit={team.kit} />
         </div>
         <ChevronRight
           size={26}
@@ -371,55 +368,31 @@ function TeamCrest({
   );
 }
 
-/** Returns a near-black or near-white that reads cleanly on the given hex. */
-function readableOn(hex: string): string {
-  const h = hex.replace('#', '');
-  const r = parseInt(h.slice(0, 2), 16);
-  const g = parseInt(h.slice(2, 4), 16);
-  const b = parseInt(h.slice(4, 6), 16);
-  const lum = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
-  return lum > 0.6 ? '#10131a' : '#f6f7f9';
-}
-
 /** A football shirt illustration drawn from the team's kit colours. */
 function KitJersey({
   kit,
-  number,
 }: {
   kit: { shirt: string; sleeve: string; outline: string };
-  number: number;
 }) {
-  const numberColor = readableOn(kit.shirt);
   return (
     <svg
-      viewBox="0 0 120 132"
-      className="w-20 h-24 sm:w-24 sm:h-28 drop-shadow-[0_4px_6px_rgba(0,0,0,0.45)]"
+      viewBox="0 0 200 184"
+      className="w-24 h-24 sm:w-28 sm:h-28 drop-shadow-[0_5px_8px_rgba(0,0,0,0.5)]"
       aria-hidden="true"
     >
-      <g stroke={kit.outline} strokeWidth={3.5} strokeLinejoin="round">
-        {/* shirt body */}
+      <g stroke={kit.outline} strokeWidth={4} strokeLinejoin="round" strokeLinecap="round">
+        {/* shirt body silhouette */}
         <path
-          d="M50 22 L40 26 L16 42 L30 68 L44 60 L42 112 L78 112 L76 60 L90 68 L104 42 L80 26 L70 22 Q60 35 50 22 Z"
+          d="M84 36 L58 44 L20 62 L31 104 L66 94 L64 166 L136 166 L134 94 L169 104 L180 62 L142 44 L116 36 Q100 56 84 36 Z"
           fill={kit.shirt}
         />
         {/* left sleeve */}
-        <path d="M40 26 L16 42 L30 68 L44 60 Z" fill={kit.sleeve} />
+        <path d="M58 44 L20 62 L31 104 L66 94 Z" fill={kit.sleeve} />
         {/* right sleeve */}
-        <path d="M80 26 L104 42 L90 68 L76 60 Z" fill={kit.sleeve} />
-        {/* v-neck collar */}
-        <path d="M50 22 Q60 38 70 22" fill="none" strokeWidth={3} />
+        <path d="M142 44 L180 62 L169 104 L134 94 Z" fill={kit.sleeve} />
+        {/* collar */}
+        <path d="M84 36 Q100 56 116 36" fill="none" strokeWidth={4} />
       </g>
-      <text
-        x="60"
-        y="98"
-        textAnchor="middle"
-        fontSize="38"
-        fontWeight="800"
-        fontFamily="system-ui, sans-serif"
-        fill={numberColor}
-      >
-        {number}
-      </text>
     </svg>
   );
 }
