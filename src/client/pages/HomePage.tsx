@@ -336,32 +336,26 @@ function TeamCrest({
           }`}
         />
         <div
-          className={`relative flex flex-col items-center justify-center rounded-2xl w-28 h-32 sm:w-32 sm:h-36 transition-all ${
+          className={`relative flex flex-col items-center justify-center overflow-hidden rounded-2xl w-28 h-32 sm:w-32 sm:h-36 transition-all ${
             active
               ? 'ring-4 ring-volt-500 scale-105 shadow-xl shadow-black/40'
               : locked
                 ? 'ring-2 ring-volt-700/60 opacity-90'
                 : 'ring-1 ring-night-700 opacity-70'
           }`}
-          style={{ backgroundColor: team.color }}
+          style={{
+            backgroundImage: `radial-gradient(circle at 50% 38%, ${team.color}33, rgba(10,12,18,0.96) 72%), linear-gradient(160deg, #1b2030, #0c0f17)`,
+          }}
         >
           {locked && (
-            <span className="absolute top-2 right-2 bg-volt-500 text-night-950 rounded-full p-0.5">
+            <span className="absolute top-2 right-2 bg-volt-500 text-night-950 rounded-full p-0.5 z-10">
               <Check size={14} strokeWidth={3} />
             </span>
           )}
-          <span
-            className="font-display text-4xl sm:text-5xl tracking-wider leading-none"
-            style={{ color: team.textColor }}
-          >
-            {team.abbr}
-          </span>
-          <span
-            className="font-heading text-[10px] uppercase tracking-widest mt-2 opacity-80"
-            style={{ color: team.textColor }}
-          >
-            {team.formation}
-          </span>
+          <KitJersey
+            kit={team.kit}
+            number={team.players[team.kickoffFwd]?.num ?? 9}
+          />
         </div>
         <ChevronRight
           size={26}
@@ -370,10 +364,63 @@ function TeamCrest({
           }`}
         />
       </div>
-      <span className="font-heading uppercase tracking-wider text-sm text-white text-center">
+      <span className="font-heading uppercase tracking-wider text-lg sm:text-xl text-white text-center leading-tight">
         {team.name}
       </span>
     </div>
+  );
+}
+
+/** Returns a near-black or near-white that reads cleanly on the given hex. */
+function readableOn(hex: string): string {
+  const h = hex.replace('#', '');
+  const r = parseInt(h.slice(0, 2), 16);
+  const g = parseInt(h.slice(2, 4), 16);
+  const b = parseInt(h.slice(4, 6), 16);
+  const lum = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+  return lum > 0.6 ? '#10131a' : '#f6f7f9';
+}
+
+/** A football shirt illustration drawn from the team's kit colours. */
+function KitJersey({
+  kit,
+  number,
+}: {
+  kit: { shirt: string; sleeve: string; outline: string };
+  number: number;
+}) {
+  const numberColor = readableOn(kit.shirt);
+  return (
+    <svg
+      viewBox="0 0 120 132"
+      className="w-20 h-24 sm:w-24 sm:h-28 drop-shadow-[0_4px_6px_rgba(0,0,0,0.45)]"
+      aria-hidden="true"
+    >
+      <g stroke={kit.outline} strokeWidth={3.5} strokeLinejoin="round">
+        {/* shirt body */}
+        <path
+          d="M50 22 L40 26 L16 42 L30 68 L44 60 L42 112 L78 112 L76 60 L90 68 L104 42 L80 26 L70 22 Q60 35 50 22 Z"
+          fill={kit.shirt}
+        />
+        {/* left sleeve */}
+        <path d="M40 26 L16 42 L30 68 L44 60 Z" fill={kit.sleeve} />
+        {/* right sleeve */}
+        <path d="M80 26 L104 42 L90 68 L76 60 Z" fill={kit.sleeve} />
+        {/* v-neck collar */}
+        <path d="M50 22 Q60 38 70 22" fill="none" strokeWidth={3} />
+      </g>
+      <text
+        x="60"
+        y="98"
+        textAnchor="middle"
+        fontSize="38"
+        fontWeight="800"
+        fontFamily="system-ui, sans-serif"
+        fill={numberColor}
+      >
+        {number}
+      </text>
+    </svg>
   );
 }
 

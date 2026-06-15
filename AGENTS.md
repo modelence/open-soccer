@@ -51,8 +51,11 @@ game state yet (no Stores/queries for gameplay).
   Right cycle the active side's team (wrapping; CPU skips the home pick so the
   two differ); Enter / S / D confirm — home confirm locks (✓) and hands control
   to the away side, away confirm sets `phase='playing'`. Selection held as
-  `homeIdx`/`awayIdx` into `TEAMS`. Crest shows abbr + formation on a team-colour
-  block, volt ring + pulsing chevrons when active.
+  `homeIdx`/`awayIdx` into `TEAMS`. Crest (`TeamCrest`) draws a `KitJersey` SVG
+  shirt illustration from the team's `kit` colours (shirt/sleeve/outline) with the
+  kickoff striker's real shirt number, on a dark gradient block faintly tinted by
+  team.color; the full team name sits below in `text-lg sm:text-xl`. Volt ring +
+  pulsing chevrons when active. `readableOn(hex)` picks a legible number colour.
 - TEAM DATA (per-country, small files): `src/client/game/teams/` — one file per
   nation exporting a `TeamData` (name, abbr, formation string, color/textColor
   for UI, outfield `kit` + `gkKit`, `kickoffFwd`, and 11 `players`
