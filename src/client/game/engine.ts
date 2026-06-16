@@ -291,6 +291,10 @@ export class PitchKickGame {
   private message = '';
   private messageTimer = 0;
   private freeze = 0;
+  /** Attackers who were in an offside position at the instant of the last
+   *  pass. If one of them is the next teammate to touch the ball, the flag is
+   *  raised (FIFA: offside is only penalised when the player gets involved). */
+  private offsideFlags = new Set<PlayerEntity>();
   /** TV camera x (field coordinates), follows the ball with smoothing. */
   private camX = FIELD_W / 2;
   /** TV camera depth (field coordinates), follows the ball vertically. */
@@ -430,6 +434,7 @@ export class PitchKickGame {
     this.bufferTimer = 0;
     this.kickPending = false;
     this.ballFree = 0;
+    this.offsideFlags.clear();
     this.tackleTimer = 0;
     this.tackleCooldown = 0;
     this.jostle = 0;
@@ -1247,6 +1252,91 @@ export class PitchKickGame {
     // still intercept.
     this.ballFree = 0.12;
     this.jostle = 0;
+    this.snapshotOffside(kicker);
+  }
+
+  /**
+   * Record which of the kicker's teammates are in an offside position at the
+   * moment the ball is played. A player is offside if, AT THIS INSTANT, they
+   * are (a) in the opponent's half, (b) ahead of the ball, and (c) ahead of
+   * the second-last defender (the offside line — usually the last outfield
+   * man, since the keeper is the last). The flag is only acted on later, if
+   * that player is the one who receives the ball (see resolvePossession).
+   */
+  private snapshotOffside(kicker: PlayerEntity) {
+    this.offsideFlags.clear();
+    const team = kicker.team;
+    const mates = team === 'home' ? this.homePlayers : this.awayPlayers;
+    const opps = team === 'home' ? this.awayPlayers : this.homePlayers;
+    // Project positions onto the attacking axis so "more forward" is always a
+    // larger number (home attacks +x, away attacks -x).
+    const atk = team === 'home' ? 1 : -1;
+    const fwd = (x: number) => x * atk;
+
+    // Offside line = the second-deepest defender along the attack axis.
+    const oppFwd = opps.map((o) => fwd(o.x)).sort((a, b) => b - a);
+    const line = oppFwd.length >= 2 ? oppFwd[1] : (oppFwd[0] ?? Infinity);
+    const ballFwd = fwd(this.ball.x);
+    const halfFwd = fwd(FIELD_W / 2);
+    // A player level with the defender / ball is onside — small tolerance.
+    const TOL = 6;
+
+    for (const m of mates) {
+      if (m === kicker || m.isGK) continue;
+      const mf = fwd(m.x);
+      if (mf > line + TOL && mf > ballFwd + TOL && mf > halfFwd) {
+        this.offsideFlags.add(m);
+      }
+    }
+  }
+
+  /** Blow up an offside: indirect free kick to the defending team at the spot
+   *  where the offside attacker interfered with play. */
+  private callOffside(offsider: PlayerEntity) {
+    const atkTeam = offsider.team;
+    const defTeam: Team = atkTeam === 'home' ? 'away' : 'home';
+    const defs = defTeam === 'home' ? this.homePlayers : this.awayPlayers;
+
+    // Free kick spot: where the offside player was when the ball reached him.
+    const spotX = clamp(offsider.x, 30, FIELD_W - 30);
+    const spotY = clamp(offsider.y, 24, FIELD_H - 24);
+    this.ball.x = spotX;
+    this.ball.y = spotY;
+    this.ball.z = 0;
+    this.ball.vx = this.ball.vy = this.ball.vz = 0;
+
+    // Nearest outfield defender takes the kick; drop him onto the ball facing
+    // upfield so he can play out.
+    const taker =
+      this.nearestTo(
+        defs.filter((p) => !p.isGK),
+        this.ball,
+      ) ?? defs[1];
+    const defAtk = defTeam === 'home' ? 1 : -1;
+    taker.x = clamp(spotX - defAtk * 14, taker.r, FIELD_W - taker.r);
+    taker.y = spotY;
+    taker.vx = taker.vy = 0;
+    taker.facing = { x: defAtk, y: 0 };
+
+    this.owner = taker;
+    if (defTeam === 'home') this.controlled = taker;
+
+    this.setMessage('OFFSIDE', 1.5);
+    this.freeze = 0.9;
+
+    // Clear transient ball state so play restarts cleanly from the free kick.
+    this.offsideFlags.clear();
+    this.lastKicker = null;
+    this.kickerLock = 0;
+    this.stealProtect = 1.0;
+    this.dispossessed = null;
+    this.dispossessedTimer = 0;
+    this.ballFree = 0;
+    this.jostle = 0;
+    this.chargeKey = null;
+    this.chargeTime = 0;
+    this.bufferTimer = 0;
+    this.kickPending = false;
   }
 
   // ---- teammates AI (home, non-controlled) --------------------------------
@@ -1756,6 +1846,18 @@ export class PitchKickGame {
           (best.team === prev.team || bestD < prevD - 7);
         if (!challengerWins) best = prev;
       }
+    }
+
+    // Offside: if the first teammate to touch the played ball was flagged
+    // offside at the moment of the pass, blow the whistle. Any other first
+    // touch (a defender, or an onside teammate) resolves the phase and clears
+    // the flags.
+    if (best && best !== prev && this.offsideFlags.size > 0) {
+      if (this.offsideFlags.has(best)) {
+        this.callOffside(best);
+        return;
+      }
+      this.offsideFlags.clear();
     }
 
     // Possession changed hands.

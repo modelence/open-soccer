@@ -420,10 +420,25 @@ game state yet (no Stores/queries for gameplay).
 - Ball bounces off all walls except goal mouths (no throw-ins yet).
 - 2-minute timer; goals reset to kickoff (conceding team kicks off);
   full-time verdict freezes play.
+- OFFSIDE (both teams): `snapshotOffside(kicker)` runs inside `afterKick` (the
+  single kick choke point), recording into `offsideFlags` (Set<PlayerEntity>)
+  every teammate who, AT THE INSTANT OF THE PASS, is (a) in the opponent half,
+  (b) ahead of the ball, AND (c) ahead of the 2nd-last defender (offside line).
+  Positions are projected onto the attack axis via `fwd(x)=x*atk` (atk=+1 home /
+  -1 away) so "more forward" is always larger; offside line = 2nd-largest
+  `fwd(opp.x)` (keeper is usually deepest/last). 6px tolerance so level=onside;
+  GK excluded as a receiver. In `resolvePossession`, the FIRST teammate to touch
+  the played ball: if they're in `offsideFlags` → `callOffside(them)`; any other
+  first touch (defender or onside mate) clears the flags (phase resolved).
+  `callOffside` = indirect free kick to the defending team at the offside spot:
+  ball placed there, nearest outfield defender dropped on it as `owner` (and as
+  `controlled` if home defends), "OFFSIDE" msg + 0.9s freeze, transient state
+  reset. Flags also cleared in resetKickoff. Through balls/long balls/GK punts
+  all funnel through afterKick, so all are policed.
 
 ### NOT YET BUILT (future slices)
 - GK diving/saving animations (keeper is just a line-tracking outfielder
-  sprite for now), offside, fouls, throw-ins/corners.
+  sprite for now), fouls, throw-ins/corners.
 - Slide tackle, ball height (lobs/crosses/chips).
 - Difficulty levels, player stats, persistence of results to a Store.
 
