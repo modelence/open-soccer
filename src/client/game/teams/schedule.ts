@@ -50,22 +50,22 @@ import { capeVerde } from './capeverde';
 import { drCongo } from './drcongo';
 import { newZealand } from './newzealand';
 
-// ── Groups (illustrative — real draw is post-game data) ──────────────────
-// Hosts seeded per FIFA: Mexico=A1, Canada=B1, USA=D1. The other 9 group
-// heads are seeded by FIFA Ranking. Pots 2/3/4 mixed for variety.
+// ── Groups — the OFFICIAL FIFA World Cup 2026 draw (Dec 2025) ─────────────
+// Source: the real group-stage draw. Hosts: Mexico (A1), Canada (B1),
+// USA (D1). These are the actual 12 groups of four.
 export const GROUPS: Record<string, TeamData[]> = {
-  A: [mexico, algeria, czechia, switzerland],
-  B: [canada, belgium, iran, capeVerde],
-  C: [usa, norway, tunisia, curacao],
-  D: [argentina, croatia, ghana, australia],
-  E: [brazil, netherlands, egypt, newZealand],
-  F: [spain, uruguay, senegal, southKorea],
-  G: [france, portugal, ivoryCoast, japan],
-  H: [england, colombia, morocco, panama],
-  I: [germany, ecuador, southAfrica, uzbekistan],
-  J: [turkey, paraguay, drCongo, iraq],
-  K: [scotland, sweden, saudiArabia, haiti],
-  L: [austria, bosnia, qatar, jordan],
+  A: [mexico, southAfrica, southKorea, czechia],
+  B: [canada, bosnia, qatar, switzerland],
+  C: [brazil, morocco, haiti, scotland],
+  D: [usa, paraguay, australia, turkey],
+  E: [germany, curacao, ivoryCoast, ecuador],
+  F: [netherlands, japan, sweden, tunisia],
+  G: [belgium, egypt, iran, newZealand],
+  H: [spain, capeVerde, saudiArabia, uruguay],
+  I: [france, senegal, iraq, norway],
+  J: [argentina, algeria, austria, jordan],
+  K: [portugal, drCongo, uzbekistan, colombia],
+  L: [england, croatia, ghana, panama],
 };
 
 // ── Schedule type ────────────────────────────────────────────────────────
@@ -77,123 +77,102 @@ export type Match = {
   venue: string;
 };
 
-// Helpers to make the fixture list readable below.
+// Helper: ISO time is UTC (the source GMT kickoff times are already UTC).
 const m = (
   iso: string,
   group: string,
-  homeIdx: number,
-  awayIdx: number,
+  home: TeamData,
+  away: TeamData,
   venue: string,
 ): Match => ({
   kickoffUTC: new Date(iso),
-  home: GROUPS[group][homeIdx],
-  away: GROUPS[group][awayIdx],
+  home,
+  away,
   group,
   venue,
 });
 
-// Each group plays a 3-matchday round-robin:
-//   MD1: 0v1, 2v3   MD2: 0v2, 3v1   MD3: 0v3, 1v2
-// Times are UTC. Match days are spread across June 11-26, 2026 with ~5
-// matches per day at realistic North-American slots (16:00 / 19:00 /
-// 22:00 / 01:00 UTC, i.e. local afternoon-to-evening across host cities).
-
+// ── Group-stage fixtures — the real WC2026 schedule ──────────────────────
+// Kickoff times are the published GMT/UTC start times. Venues use the FIFA
+// tournament stadium names (host-city assignments are approximate).
 export const MATCHES: Match[] = [
-  // ── MATCHDAY 1 (June 11-16) ────────────────────────────────────────────
-  // Jun 11 — opener
-  m('2026-06-11T20:00:00Z', 'A', 0, 1, 'Estadio Azteca, Mexico City'),
-  // Jun 12
-  m('2026-06-12T19:00:00Z', 'A', 2, 3, 'Estadio BBVA, Monterrey'),
-  m('2026-06-12T22:00:00Z', 'B', 0, 1, 'BMO Field, Toronto'),
-  m('2026-06-12T01:00:00Z', 'C', 0, 1, 'SoFi Stadium, Los Angeles'),
-  // Jun 13
-  m('2026-06-13T16:00:00Z', 'B', 2, 3, 'BC Place, Vancouver'),
-  m('2026-06-13T19:00:00Z', 'C', 2, 3, 'AT&T Stadium, Arlington'),
-  m('2026-06-13T22:00:00Z', 'D', 0, 1, 'MetLife Stadium, New Jersey'),
-  m('2026-06-14T01:00:00Z', 'D', 2, 3, 'Lincoln Financial Field, Philadelphia'),
-  // Jun 14
-  m('2026-06-14T16:00:00Z', 'E', 0, 1, 'Mercedes-Benz Stadium, Atlanta'),
-  m('2026-06-14T19:00:00Z', 'E', 2, 3, 'Hard Rock Stadium, Miami'),
-  m('2026-06-14T22:00:00Z', 'F', 0, 1, 'Levi’s Stadium, San Francisco'),
-  m('2026-06-15T01:00:00Z', 'F', 2, 3, 'NRG Stadium, Houston'),
-  // Jun 15
-  m('2026-06-15T16:00:00Z', 'G', 0, 1, 'Gillette Stadium, Boston'),
-  m('2026-06-15T19:00:00Z', 'G', 2, 3, 'Lumen Field, Seattle'),
-  m('2026-06-15T22:00:00Z', 'H', 0, 1, 'Arrowhead Stadium, Kansas City'),
-  m('2026-06-16T01:00:00Z', 'H', 2, 3, 'Lincoln Financial Field, Philadelphia'),
-  // Jun 16
-  m('2026-06-16T16:00:00Z', 'I', 0, 1, 'MetLife Stadium, New Jersey'),
-  m('2026-06-16T19:00:00Z', 'I', 2, 3, 'AT&T Stadium, Arlington'),
-  m('2026-06-16T22:00:00Z', 'J', 0, 1, 'Mercedes-Benz Stadium, Atlanta'),
-  m('2026-06-17T01:00:00Z', 'J', 2, 3, 'Estadio BBVA, Monterrey'),
-  // Jun 17
-  m('2026-06-17T16:00:00Z', 'K', 0, 1, 'BMO Field, Toronto'),
-  m('2026-06-17T19:00:00Z', 'K', 2, 3, 'Hard Rock Stadium, Miami'),
-  m('2026-06-17T22:00:00Z', 'L', 0, 1, 'Levi’s Stadium, San Francisco'),
-  m('2026-06-18T01:00:00Z', 'L', 2, 3, 'Estadio Azteca, Mexico City'),
+  // ── MATCHDAY 1 ─────────────────────────────────────────────────────────
+  m('2026-06-11T19:00:00Z', 'A', mexico, southAfrica, 'Mexico City Stadium'),
+  m('2026-06-12T02:00:00Z', 'A', southKorea, czechia, 'Los Angeles Stadium'),
+  m('2026-06-12T19:00:00Z', 'B', canada, bosnia, 'Toronto Stadium'),
+  m('2026-06-13T01:00:00Z', 'D', usa, paraguay, 'Los Angeles Stadium'),
+  m('2026-06-13T19:00:00Z', 'B', qatar, switzerland, 'San Francisco Bay Area Stadium'),
+  m('2026-06-13T22:00:00Z', 'C', brazil, morocco, 'Boston Stadium'),
+  m('2026-06-14T01:00:00Z', 'C', haiti, scotland, 'New York New Jersey Stadium'),
+  m('2026-06-14T04:00:00Z', 'D', australia, turkey, 'BC Place, Vancouver'),
+  m('2026-06-14T17:00:00Z', 'E', germany, curacao, 'Philadelphia Stadium'),
+  m('2026-06-14T20:00:00Z', 'F', netherlands, japan, 'Dallas Stadium'),
+  m('2026-06-14T23:00:00Z', 'E', ivoryCoast, ecuador, 'Atlanta Stadium'),
+  m('2026-06-15T02:00:00Z', 'F', sweden, tunisia, 'Houston Stadium'),
+  m('2026-06-15T16:00:00Z', 'H', spain, capeVerde, 'Miami Stadium'),
+  m('2026-06-15T19:00:00Z', 'G', belgium, egypt, 'Kansas City Stadium'),
+  m('2026-06-15T22:00:00Z', 'H', saudiArabia, uruguay, 'Seattle Stadium'),
+  m('2026-06-16T01:00:00Z', 'G', iran, newZealand, 'San Francisco Bay Area Stadium'),
+  m('2026-06-16T19:00:00Z', 'I', france, senegal, 'New York New Jersey Stadium'),
+  m('2026-06-16T22:00:00Z', 'I', iraq, norway, 'Dallas Stadium'),
+  m('2026-06-17T01:00:00Z', 'J', argentina, algeria, 'Atlanta Stadium'),
+  m('2026-06-17T04:00:00Z', 'J', austria, jordan, 'Estadio Monterrey'),
+  m('2026-06-17T17:00:00Z', 'K', portugal, drCongo, 'Toronto Stadium'),
+  m('2026-06-17T20:00:00Z', 'L', england, croatia, 'Boston Stadium'),
+  m('2026-06-17T23:00:00Z', 'L', ghana, panama, 'Philadelphia Stadium'),
+  m('2026-06-18T02:00:00Z', 'K', uzbekistan, colombia, 'BC Place, Vancouver'),
 
-  // ── MATCHDAY 2 (June 18-22) ────────────────────────────────────────────
-  // Jun 18
-  m('2026-06-18T16:00:00Z', 'A', 0, 2, 'Estadio Azteca, Mexico City'),
-  m('2026-06-18T19:00:00Z', 'A', 3, 1, 'Estadio BBVA, Monterrey'),
-  m('2026-06-18T22:00:00Z', 'B', 0, 2, 'BC Place, Vancouver'),
-  m('2026-06-19T01:00:00Z', 'B', 3, 1, 'BMO Field, Toronto'),
-  // Jun 19
-  m('2026-06-19T16:00:00Z', 'C', 0, 2, 'AT&T Stadium, Arlington'),
-  m('2026-06-19T19:00:00Z', 'C', 3, 1, 'SoFi Stadium, Los Angeles'),
-  m('2026-06-19T22:00:00Z', 'D', 0, 2, 'MetLife Stadium, New Jersey'),
-  m('2026-06-20T01:00:00Z', 'D', 3, 1, 'Lincoln Financial Field, Philadelphia'),
-  // Jun 20
-  m('2026-06-20T16:00:00Z', 'E', 0, 2, 'Hard Rock Stadium, Miami'),
-  m('2026-06-20T19:00:00Z', 'E', 3, 1, 'Mercedes-Benz Stadium, Atlanta'),
-  m('2026-06-20T22:00:00Z', 'F', 0, 2, 'NRG Stadium, Houston'),
-  m('2026-06-21T01:00:00Z', 'F', 3, 1, 'Levi’s Stadium, San Francisco'),
-  // Jun 21
-  m('2026-06-21T16:00:00Z', 'G', 0, 2, 'Gillette Stadium, Boston'),
-  m('2026-06-21T19:00:00Z', 'G', 3, 1, 'Lumen Field, Seattle'),
-  m('2026-06-21T22:00:00Z', 'H', 0, 2, 'Arrowhead Stadium, Kansas City'),
-  m('2026-06-22T01:00:00Z', 'H', 3, 1, 'Lincoln Financial Field, Philadelphia'),
-  // Jun 22
-  m('2026-06-22T16:00:00Z', 'I', 0, 2, 'MetLife Stadium, New Jersey'),
-  m('2026-06-22T19:00:00Z', 'I', 3, 1, 'AT&T Stadium, Arlington'),
-  m('2026-06-22T22:00:00Z', 'J', 0, 2, 'Mercedes-Benz Stadium, Atlanta'),
-  m('2026-06-23T01:00:00Z', 'J', 3, 1, 'Estadio BBVA, Monterrey'),
-  // Jun 23
-  m('2026-06-23T16:00:00Z', 'K', 0, 2, 'BC Place, Vancouver'),
-  m('2026-06-23T19:00:00Z', 'K', 3, 1, 'BMO Field, Toronto'),
-  m('2026-06-23T22:00:00Z', 'L', 0, 2, 'Hard Rock Stadium, Miami'),
-  m('2026-06-24T01:00:00Z', 'L', 3, 1, 'Estadio Azteca, Mexico City'),
+  // ── MATCHDAY 2 ─────────────────────────────────────────────────────────
+  m('2026-06-18T16:00:00Z', 'A', czechia, southAfrica, 'Estadio Guadalajara'),
+  m('2026-06-18T19:00:00Z', 'B', switzerland, bosnia, 'Seattle Stadium'),
+  m('2026-06-18T22:00:00Z', 'B', canada, qatar, 'Toronto Stadium'),
+  m('2026-06-19T01:00:00Z', 'A', mexico, southKorea, 'Mexico City Stadium'),
+  m('2026-06-19T19:00:00Z', 'D', usa, australia, 'San Francisco Bay Area Stadium'),
+  m('2026-06-19T22:00:00Z', 'C', scotland, morocco, 'New York New Jersey Stadium'),
+  m('2026-06-20T00:30:00Z', 'C', brazil, haiti, 'Los Angeles Stadium'),
+  m('2026-06-20T03:00:00Z', 'D', turkey, paraguay, 'BC Place, Vancouver'),
+  m('2026-06-20T17:00:00Z', 'F', netherlands, sweden, 'Philadelphia Stadium'),
+  m('2026-06-20T20:00:00Z', 'E', germany, ivoryCoast, 'Atlanta Stadium'),
+  m('2026-06-21T03:00:00Z', 'E', ecuador, curacao, 'Houston Stadium'),
+  m('2026-06-21T04:00:00Z', 'F', tunisia, japan, 'Dallas Stadium'),
+  m('2026-06-21T16:00:00Z', 'H', spain, saudiArabia, 'Miami Stadium'),
+  m('2026-06-21T19:00:00Z', 'G', belgium, iran, 'Kansas City Stadium'),
+  m('2026-06-21T22:00:00Z', 'H', uruguay, capeVerde, 'Seattle Stadium'),
+  m('2026-06-22T01:00:00Z', 'G', newZealand, egypt, 'San Francisco Bay Area Stadium'),
+  m('2026-06-22T17:00:00Z', 'J', argentina, austria, 'Estadio Monterrey'),
+  m('2026-06-22T21:00:00Z', 'I', france, iraq, 'New York New Jersey Stadium'),
+  m('2026-06-23T00:00:00Z', 'I', norway, senegal, 'Dallas Stadium'),
+  m('2026-06-23T03:00:00Z', 'J', jordan, algeria, 'Houston Stadium'),
+  m('2026-06-23T17:00:00Z', 'K', portugal, uzbekistan, 'Toronto Stadium'),
+  m('2026-06-23T20:00:00Z', 'L', england, ghana, 'Boston Stadium'),
+  m('2026-06-23T23:00:00Z', 'L', panama, croatia, 'Philadelphia Stadium'),
+  m('2026-06-24T02:00:00Z', 'K', colombia, drCongo, 'BC Place, Vancouver'),
 
-  // ── MATCHDAY 3 (June 24-27) — same group, same kickoff for fairness ───
-  // Jun 24
-  m('2026-06-24T18:00:00Z', 'A', 0, 3, 'Estadio Azteca, Mexico City'),
-  m('2026-06-24T18:00:00Z', 'A', 1, 2, 'Estadio BBVA, Monterrey'),
-  m('2026-06-24T22:00:00Z', 'B', 0, 3, 'BMO Field, Toronto'),
-  m('2026-06-24T22:00:00Z', 'B', 1, 2, 'BC Place, Vancouver'),
-  // Jun 25
-  m('2026-06-25T18:00:00Z', 'C', 0, 3, 'SoFi Stadium, Los Angeles'),
-  m('2026-06-25T18:00:00Z', 'C', 1, 2, 'AT&T Stadium, Arlington'),
-  m('2026-06-25T22:00:00Z', 'D', 0, 3, 'MetLife Stadium, New Jersey'),
-  m('2026-06-25T22:00:00Z', 'D', 1, 2, 'Lincoln Financial Field, Philadelphia'),
-  // Jun 26
-  m('2026-06-26T18:00:00Z', 'E', 0, 3, 'Mercedes-Benz Stadium, Atlanta'),
-  m('2026-06-26T18:00:00Z', 'E', 1, 2, 'Hard Rock Stadium, Miami'),
-  m('2026-06-26T22:00:00Z', 'F', 0, 3, 'Levi’s Stadium, San Francisco'),
-  m('2026-06-26T22:00:00Z', 'F', 1, 2, 'NRG Stadium, Houston'),
-  // Jun 27
-  m('2026-06-27T16:00:00Z', 'G', 0, 3, 'Gillette Stadium, Boston'),
-  m('2026-06-27T16:00:00Z', 'G', 1, 2, 'Lumen Field, Seattle'),
-  m('2026-06-27T20:00:00Z', 'H', 0, 3, 'Arrowhead Stadium, Kansas City'),
-  m('2026-06-27T20:00:00Z', 'H', 1, 2, 'Lincoln Financial Field, Philadelphia'),
-  m('2026-06-28T00:00:00Z', 'I', 0, 3, 'MetLife Stadium, New Jersey'),
-  m('2026-06-28T00:00:00Z', 'I', 1, 2, 'AT&T Stadium, Arlington'),
-  // Jun 28
-  m('2026-06-28T16:00:00Z', 'J', 0, 3, 'Mercedes-Benz Stadium, Atlanta'),
-  m('2026-06-28T16:00:00Z', 'J', 1, 2, 'Estadio BBVA, Monterrey'),
-  m('2026-06-28T20:00:00Z', 'K', 0, 3, 'BC Place, Vancouver'),
-  m('2026-06-28T20:00:00Z', 'K', 1, 2, 'BMO Field, Toronto'),
-  m('2026-06-29T00:00:00Z', 'L', 0, 3, 'Hard Rock Stadium, Miami'),
-  m('2026-06-29T00:00:00Z', 'L', 1, 2, 'Estadio Azteca, Mexico City'),
+  // ── MATCHDAY 3 (simultaneous kickoffs within each group) ───────────────
+  m('2026-06-24T19:00:00Z', 'B', switzerland, canada, 'BC Place, Vancouver'),
+  m('2026-06-24T19:00:00Z', 'B', bosnia, qatar, 'Seattle Stadium'),
+  m('2026-06-24T22:00:00Z', 'C', scotland, brazil, 'Miami Stadium'),
+  m('2026-06-24T22:00:00Z', 'C', morocco, haiti, 'Boston Stadium'),
+  m('2026-06-25T01:00:00Z', 'A', czechia, mexico, 'Mexico City Stadium'),
+  m('2026-06-25T01:00:00Z', 'A', southAfrica, southKorea, 'Estadio Guadalajara'),
+  m('2026-06-25T20:00:00Z', 'E', ecuador, germany, 'Philadelphia Stadium'),
+  m('2026-06-25T20:00:00Z', 'E', curacao, ivoryCoast, 'Atlanta Stadium'),
+  m('2026-06-25T23:00:00Z', 'F', japan, sweden, 'Dallas Stadium'),
+  m('2026-06-25T23:00:00Z', 'F', tunisia, netherlands, 'Houston Stadium'),
+  m('2026-06-26T02:00:00Z', 'D', turkey, usa, 'San Francisco Bay Area Stadium'),
+  m('2026-06-26T02:00:00Z', 'D', paraguay, australia, 'Los Angeles Stadium'),
+  m('2026-06-26T19:00:00Z', 'I', norway, france, 'New York New Jersey Stadium'),
+  m('2026-06-26T19:00:00Z', 'I', senegal, iraq, 'Dallas Stadium'),
+  m('2026-06-27T00:00:00Z', 'H', capeVerde, saudiArabia, 'Seattle Stadium'),
+  m('2026-06-27T00:00:00Z', 'H', uruguay, spain, 'Miami Stadium'),
+  m('2026-06-27T03:00:00Z', 'G', egypt, iran, 'Kansas City Stadium'),
+  m('2026-06-27T03:00:00Z', 'G', newZealand, belgium, 'San Francisco Bay Area Stadium'),
+  m('2026-06-27T21:00:00Z', 'L', panama, england, 'Boston Stadium'),
+  m('2026-06-27T21:00:00Z', 'L', croatia, ghana, 'Philadelphia Stadium'),
+  m('2026-06-27T23:30:00Z', 'K', colombia, portugal, 'Toronto Stadium'),
+  m('2026-06-27T23:30:00Z', 'K', drCongo, uzbekistan, 'BC Place, Vancouver'),
+  m('2026-06-28T02:00:00Z', 'J', algeria, austria, 'Estadio Monterrey'),
+  m('2026-06-28T02:00:00Z', 'J', jordan, argentina, 'Houston Stadium'),
 ].sort((a, b) => a.kickoffUTC.getTime() - b.kickoffUTC.getTime());
 
 // ── Lookups ──────────────────────────────────────────────────────────────

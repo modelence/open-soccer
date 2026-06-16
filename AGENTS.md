@@ -112,11 +112,12 @@ game state yet (no Stores/queries for gameplay).
   always re-fetch the source if updating.
   WC2026 SCHEDULE & DEFAULT MATCHUP (`src/client/game/teams/schedule.ts`):
   a predownloaded group-stage fixture list so the team picker DEFAULTS to the
-  live/next real World Cup 2026 game. Exports: `GROUPS` (12 groups A-L × 4 of
-  our 48 TeamData — hosts seeded Mexico=A1/Canada=B1/USA=D1, rest illustrative
-  since the real Dec-2025 draw isn't in our data), `MATCHES` (all 72 group-stage
-  matches as `{kickoffUTC:Date, home, away, group, venue}`, 3 round-robin
-  matchdays Jun 11-28 2026, North-American UTC kickoff slots, sorted by time),
+  live/next real World Cup 2026 game. Exports: `GROUPS` (the REAL official FIFA
+  Dec-2025 draw — 12 groups A-L × 4 of our 48 TeamData, sourced from Al Jazeera,
+  e.g. A=Mexico/SouthAfrica/SouthKorea/Czechia, I=France/Senegal/Iraq/Norway),
+  `MATCHES` (all 72 real group-stage fixtures as `{kickoffUTC:Date, home, away,
+  group, venue}` with the published GMT(=UTC) kickoff times Jun 11-28 2026,
+  sorted by time; venues use FIFA stadium names, host-city mapping approximate),
   and `findCurrentOrNextMatch(now=new Date()): Match|null` — returns the LIVE
   match (kickoff ≤ now < kickoff+110min) else the next upcoming else null.
   Only GROUP STAGE is stored (knockouts reference TBD group-position teams, not
