@@ -218,18 +218,24 @@ game state yet (no Stores/queries for gameplay).
   No-target fallback knock also uses heldDir.
   Control follows YOUR pass to the receiver (user-initiated, FIFA-style).
 - BALL GRAVITY ON RECEPTION (added after "receiver runs away and misses the
-  pass"): passAssisted sets `this.passReceiver = target` (right after the
-  null-target check, so all branches share it); cleared in resolvePossession
-  (once possession resolves) and resetKickoff. In updateControlled's movement
-  `else` block, while `incoming && p === this.passReceiver`, the receiver's run
-  is biased to MEET the ball: aim = closest point on the ball's forward
-  velocity ray to the player (slow ball <40 → aim at ball directly). `gravity`
-  weight = (no arrow held → 1, full auto at RUN_SPEED) else
-  `clamp(stray*(0.5+0.5*prox)+0.12, 0, 0.9)` where prox rises as ball nears
-  (60..250px) and stray rises as player drifts off the ball's line (10..70px
-  lateral). Heading = lerp(userInput, autoAim, gravity). Net effect: keeps your
-  run when already on the ball's path, sticks to it when about to miss, takes
-  over fully when no direction is held — matches FIFA reception assist.
+  pass"; v2 after "I keep a direction pressed and they run off and miss"):
+  passAssisted sets `this.passReceiver = target` (right after the null-target
+  check, so all branches share it); cleared in resolvePossession (once
+  possession resolves) and resetKickoff. In updateControlled's movement `else`
+  block, while `incoming && p === this.passReceiver`, we PREDICT whether the
+  user's CURRENT held run will actually intercept the ball: a stepped 1.3s
+  simulation (stepT 0.05) advances the player at the input-intended velocity
+  and the ball with its exponential friction (grounded k=BALL_DECAY=1.5,
+  airborne k*0.12) — `dispK=(1-e^{-k·stepT})/k` per step — tracking minGap (the
+  closest the run gets to the ball) and meetX/Y (ball pos at that moment). This
+  friction model is essential: a constant-velocity approx made a slowing ball
+  look like it could always catch a runaway player, so gravity barely applied
+  — the v1 bug. `gravity = hasInput ? clamp((minGap-(CONTROL_DIST+6))/45,0,1) :
+  1`. So if the current run already meets the ball (minGap within reach) →
+  gravity 0, run untouched; if it would miss → ramps to full override toward
+  meetX/Y; no arrow held → full auto. Heading = lerp(input, dir-to-meet,
+  gravity); speed bumps to RUN_SPEED when gravity>0.25 (unless sprinting) so
+  they can actually get there.
 - PASS-LANE OPENNESS (added after "passes go straight into the opponent"):
   receiver selection now also scores how OPEN the passing lane is, not just
   alignment+distance. For ground passes (short/through, NOT lofted long) each

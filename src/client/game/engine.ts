@@ -690,58 +690,73 @@ export class PitchKickGame {
         iy = dy / l;
       }
 
-      // FIFA-style "ball gravity": while OUR pass is in flight to this exact
-      // receiver, bias their run to meet the ball so a mistimed arrow press
-      // doesn't make them run away and miss it. The pull stays gentle while
-      // they're already on the ball's line (they keep their run), and grows
-      // strong as the ball nears or as they drift off its path (about to
-      // miss) — and with no arrow held it takes over completely.
-      let gravity = 0;
-      let gravAimX = 0;
-      let gravAimY = 0;
-      if (incoming && p === this.passReceiver) {
-        const bspeed = Math.hypot(this.ball.vx, this.ball.vy);
-        // Meeting point: the closest point on the ball's forward path to the
-        // player (where their run most naturally intersects it). For a slow
-        // ball, just aim straight at it.
-        let aimX = this.ball.x;
-        let aimY = this.ball.y;
-        if (bspeed > 40) {
-          const ux = this.ball.vx / bspeed;
-          const uy = this.ball.vy / bspeed;
-          const t = Math.max(0, (p.x - this.ball.x) * ux + (p.y - this.ball.y) * uy);
-          aimX = this.ball.x + ux * t;
-          aimY = this.ball.y + uy * t;
-        }
-        gravAimX = aimX - p.x;
-        gravAimY = aimY - p.y;
-        const offPath = len(gravAimX, gravAimY); // lateral miss distance
-        const ballDist = dist(p, this.ball);
-        // 0 when the ball is far (>250px), 1 when it's close (<60px).
-        const prox = clamp(1 - (ballDist - 60) / 190, 0, 1);
-        // 0 while on the ball's line (<10px), 1 once well off it (>70px).
-        const stray = clamp((offPath - 10) / 60, 0, 1);
-        gravity = hasInput
-          ? clamp(stray * (0.5 + 0.5 * prox) + 0.12, 0, 0.9)
-          : 1;
-      }
-
-      const speed = this.keys.has('KeyE')
-        ? SPRINT_SPEED
-        : hasInput
-          ? WALK_SPEED
-          : gravity > 0
-            ? RUN_SPEED
-            : WALK_SPEED;
-
+      const sprint = this.keys.has('KeyE');
+      let speed = sprint ? SPRINT_SPEED : WALK_SPEED;
       let hx = ix;
       let hy = iy;
-      if (gravity > 0) {
-        const gl = len(gravAimX, gravAimY);
-        const ax = gl > 1 ? gravAimX / gl : 0;
-        const ay = gl > 1 ? gravAimY / gl : 0;
-        hx = ix * (1 - gravity) + ax * gravity;
-        hy = iy * (1 - gravity) + ay * gravity;
+
+      // FIFA-style "ball gravity": while OUR pass is in flight to this exact
+      // receiver, predict whether continuing the user's CURRENT run will
+      // actually intercept the ball. If it will (they're already on a path to
+      // meet it), leave their run alone. If it WON'T — e.g. they're holding a
+      // direction that runs them away/ahead and the ball can't catch them —
+      // override toward the meeting point so they don't miss it. With no arrow
+      // held, the receiver fully takes over and collects the ball.
+      if (incoming && p === this.passReceiver) {
+        // The velocity the user's input WOULD give the player this frame.
+        const ivx = ix * speed;
+        const ivy = iy * speed;
+        // Simulate the next ~1.3s to find the closest the player's CURRENT run
+        // gets to the ball — accounting for the ball's exponential friction so
+        // a runaway player who the (slowing) ball can never catch is correctly
+        // flagged as "going to miss". Airborne passes decay far slower.
+        const airborne = this.ball.z > 0.01 || this.ball.vz > 0.01;
+        const k = airborne ? BALL_DECAY * 0.12 : BALL_DECAY;
+        let bx = this.ball.x;
+        let by = this.ball.y;
+        let bvx = this.ball.vx;
+        let bvy = this.ball.vy;
+        let px = p.x;
+        let py = p.y;
+        const stepT = 0.05;
+        const decayStep = Math.exp(-k * stepT);
+        // Displacement over one step for the current velocity (∫v dt).
+        const dispK = k > 1e-3 ? (1 - decayStep) / k : stepT;
+        let minGap = Infinity;
+        let meetX = bx;
+        let meetY = by;
+        for (let t = 0; t <= 1.3; t += stepT) {
+          const g = len(bx - px, by - py);
+          if (g < minGap) {
+            minGap = g;
+            meetX = bx;
+            meetY = by;
+          }
+          bx += bvx * dispK;
+          by += bvy * dispK;
+          bvx *= decayStep;
+          bvy *= decayStep;
+          px += ivx * stepT;
+          py += ivy * stepT;
+        }
+
+        // 0 while the current run clearly intercepts (gap within reach), 1 once
+        // it would clearly miss (gap a stride or more outside reach).
+        const reach = CONTROL_DIST + 6;
+        const gravity = hasInput ? clamp((minGap - reach) / 45, 0, 1) : 1;
+
+        if (gravity > 0) {
+          const ax = meetX - p.x;
+          const ay = meetY - p.y;
+          const al = len(ax, ay);
+          const ux = al > 1 ? ax / al : 0;
+          const uy = al > 1 ? ay / al : 0;
+          hx = ix * (1 - gravity) + ux * gravity;
+          hy = iy * (1 - gravity) + uy * gravity;
+          // Make sure they can actually get there: chase at a real running
+          // pace when meaningfully pulled off their input.
+          if (!sprint && gravity > 0.25) speed = RUN_SPEED;
+        }
       }
 
       let tvx = 0;
