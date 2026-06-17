@@ -341,6 +341,27 @@ game state yet (no Stores/queries for gameplay).
   RESET to 0 in resolvePossession whenever a keeper FIRST gains the ball
   (`if (best.isGK && best!==prev) gkHoldTimer=0`) so a stale timer from a prior
   possession can't make him distribute instantly.
+  REACTION-BASED SAVE REACH (added after "whatever I shoot the keeper keeps
+  deflecting it — how does he reach it so well? he shouldn't catch/deflect strong
+  shots from close so easily"): the keeper "saves" by gaining possession when the
+  ball is within `reach` of his body — but reach was a FLAT radius, so a fierce
+  point-blank shot was gathered exactly as easily as a tame long-range one (no
+  reaction-time limit → magnetic keeper). New `keeperReach(gk, ballSpeed)`
+  replaces the old `CONTROL_DIST + (ballSpeed<320?34:12)`:
+  - Slow/loose ball (<340 speed): `CONTROL_DIST + 34` (generous hands-at-feet
+    gather, unchanged) so he still claims loose balls.
+  - A SHOT (>=340): reach = `gk.r + ball.r + buffer` where the buffer models how
+    much time he had to REACT — `distBuf = clamp((shotDist-120)*0.05, 0, 26)`
+    (grows with how far away the shot was struck, `shotDist = dist(lastKicker,
+    gk)`) MINUS `pacePenalty = clamp((ballSpeed-680)*0.02, 0, 16)` (harder shots
+    give less time), floored at 0. So a point-blank blast → buffer≈0 (he only
+    saves what's hit straight at his body, ball can fly past into the corner);
+    a 20-yarder → a real dive range across goal; a tame shot from distance →
+    comfortably reached. This is the main lever that stops the keeper reaching
+    every shot regardless of pace/range. Combine with the ~72% lateral tracking
+    (positioning) and the catch(<=820)/parry(>820) split: weak shots within reach
+    are caught & held, fierce shots within reach are parried wide, and shots he
+    can't react to beat him cleanly.
 - PASS-LANE OPENNESS (added after "passes go straight into the opponent"):
   receiver selection now also scores how OPEN the passing lane is, not just
   alignment+distance. For ground passes (short/through, NOT lofted long) each

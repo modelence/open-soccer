@@ -2053,9 +2053,7 @@ export class PitchKickGame {
       // Keepers have HANDS: a bigger gather radius so a slow ball at their feet
       // is claimed (not left for an attacker to steal), and enough reach to
       // pull in / parry a shot they get across to.
-      const reach = p.isGK
-        ? CONTROL_DIST + (ballSpeed < 320 ? 34 : 12)
-        : CONTROL_DIST;
+      const reach = p.isGK ? this.keeperReach(p, ballSpeed) : CONTROL_DIST;
       const d = dist(p, this.ball);
       if (d <= reach && d < bestD) {
         bestD = d;
@@ -2189,6 +2187,29 @@ export class PitchKickGame {
     this.ball.vz = 0;
     this.ball.vx = owner.vx;
     this.ball.vy = owner.vy;
+  }
+
+  /** How far a keeper can actually get to a ball. A slow/loose ball is gathered
+   *  with a generous radius (hands at his feet). But a SHOT can only be reached
+   *  if he has time to REACT — a fierce strike from close range gives him almost
+   *  no window, so his effective reach collapses toward his body and the ball
+   *  can fly past into the corner. A shot from distance (or a tame one) he reads
+   *  and gets across to. This is what stops him from magnetically saving every
+   *  shot regardless of pace or range. */
+  private keeperReach(gk: PlayerEntity, ballSpeed: number): number {
+    // Slow/loose ball — normal big gather radius.
+    if (ballSpeed < 340) return CONTROL_DIST + 34;
+    // How far away was the shot struck? The farther the shot's origin, the more
+    // time the keeper had to set himself and dive across.
+    const shooter = this.lastKicker;
+    const shotDist = shooter ? dist(shooter, gk) : 520;
+    // Reaction buffer grows with shot distance, shrinks with shot pace. A
+    // point-blank blast → almost no buffer (he can only save what's hit at him);
+    // a 25-yarder → a real dive range across the goal.
+    const distBuf = clamp((shotDist - 120) * 0.05, 0, 26);
+    const pacePenalty = clamp((ballSpeed - 680) * 0.02, 0, 16);
+    const buffer = Math.max(0, distBuf - pacePenalty);
+    return gk.r + this.ball.r + buffer;
   }
 
   /** A keeper can't cleanly hold a fiercely-struck shot. He gets a hand/body
