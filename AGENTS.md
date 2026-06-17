@@ -287,6 +287,14 @@ game state yet (no Stores/queries for gameplay).
   out to smother, and his bigger gather reach wins it. `carrierClose =
   |carrier.x-ownGoalX|<M(13) && |carrier.y-mid|<M(20)`; loose-ball rush still
   needs ballInBoxX && ballCentral. Holding W still overrides for a manual charge.
+  COVERING-DEFENDER GUARD (added after "should the keeper rush if defenders are
+  between him and the ball?"): autoRush also requires `!defenderCovering` — no
+  own outfielder is positioned GOAL-SIDE of the ball (|m.x-ownGoalX| < ballDX-8)
+  AND within 70px of the keeper→ball segment (perp distance via projection t
+  clamped 0..1). If a defender is covering the lane the situation's handled, so
+  the keeper holds his line instead of charging out past his own man and
+  vacating the goal. `defenderOnBall` (mate within 64px of ball) still applies
+  too. MANUAL W ignores both guards — explicit player command.
 - PASS-LANE OPENNESS (added after "passes go straight into the opponent"):
   receiver selection now also scores how OPEN the passing lane is, not just
   alignment+distance. For ground passes (short/through, NOT lofted long) each

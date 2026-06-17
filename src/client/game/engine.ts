@@ -1393,6 +1393,23 @@ export class PitchKickGame {
     // Is a teammate already right on the ball (challenging)? If so, no need to
     // abandon the goal — only rush when it's genuinely the keeper's to claim.
     const defenderOnBall = mates.some((m) => dist(m, this.ball) < 64);
+    // Is a defender COVERING — positioned goal-side, between the keeper and the
+    // ball, and roughly in the lane? If so the situation is already handled, so
+    // the keeper should hold his line rather than charging out past his own man
+    // and vacating the goal. (Goal-side = nearer our goal line than the ball;
+    // "in the lane" = laterally close to the keeper→ball line.)
+    const kbx = bx - p.x;
+    const kby = by - p.y;
+    const kbLen = Math.max(1, len(kbx, kby));
+    const defenderCovering = mates.some((m) => {
+      const goalSide = Math.abs(m.x - ownGoalX) < ballDX - 8; // nearer our goal
+      if (!goalSide) return false;
+      // Perpendicular distance from the defender to the keeper→ball segment.
+      const t = clamp(((m.x - p.x) * kbx + (m.y - p.y) * kby) / (kbLen * kbLen), 0, 1);
+      const px = p.x + kbx * t;
+      const py = p.y + kby * t;
+      return len(m.x - px, m.y - py) < 70;
+    });
     const manualRush = p.team === 'home' && this.gkRush > 0;
     const ballInBoxX = ballDX < M(18); // ~ edge of the penalty area (depth)
     // Only commit to a rush when the ball is also CENTRAL — within the penalty
@@ -1412,7 +1429,11 @@ export class PitchKickGame {
       !!carrier &&
       Math.abs(carrier.x - ownGoalX) < M(13) &&
       Math.abs(carrier.y - mid) < M(20);
-    const autoRush = (looseClose || carrierClose) && !defenderOnBall;
+    // Auto-rush only when it's genuinely the keeper's to claim: no teammate is
+    // already on the ball AND none is covering goal-side in the lane. (A manual
+    // W rush ignores this — the player explicitly commanded the charge.)
+    const autoRush =
+      (looseClose || carrierClose) && !defenderOnBall && !defenderCovering;
     const boxEdge = ownGoalX + sign * M(16); // don't sweep past the box
 
     if (manualRush || autoRush) {
