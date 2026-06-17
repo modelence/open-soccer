@@ -15,12 +15,17 @@
   --font-heading: 'Oswald', sans-serif;
   --font-body: 'Barlow', sans-serif;
 
-  /* Pitch-side darkness */
+  /* Pitch-side darkness (900–600 = surfaces/borders) */
   --color-night-950: #070b10;
   --color-night-900: #0c1219;
   --color-night-800: #131c27;
   --color-night-700: #1e2b3a;
   --color-night-600: #2c3e52;
+  /* Muted slate text tints (500–200 = readable on the dark background) */
+  --color-night-500: #5d738c;
+  --color-night-400: #8295ab;
+  --color-night-300: #a6b6c8;
+  --color-night-200: #c6d2de;
 
   /* Grass */
   --color-pitch-700: #1f6b3a;

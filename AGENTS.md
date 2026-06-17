@@ -763,7 +763,13 @@ npm test             # Run tests (not configured)
 - **Tailwind CSS v4** via the `@tailwindcss/vite` plugin. All Tailwind config
   is CSS-first in `src/client/index.css` (`@import "tailwindcss"`, `@theme`,
   `@source`, etc.) — customize the design system there.
-- **Color Scheme**: Gray, black, white primary colors; blue, red accents.
+- **Color Scheme**: PitchKick design system in `index.css @theme`. `night-950..600`
+  = pitch-side darks for SURFACES/BORDERS/backgrounds ONLY (don't use as text —
+  too dark on the near-black bg). `night-500..200` (#5d738c→#c6d2de) = readable
+  muted SLATE TEXT tints; use `text-night-300` for default muted copy, `-400/-500`
+  for dimmer secondary text. `volt-500/400/300` = electric-lime accent. Fixed
+  after user reported gray-on-black text ("ARCADE FOOTBALL", hints, etc.) was
+  near-invisible — all `text-night-600/700` were remapped to the 300/500 tints.
 
 ### 9. SEO (TITLE, DESCRIPTION, OG TAGS)
 

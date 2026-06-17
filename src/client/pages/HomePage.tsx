@@ -138,7 +138,7 @@ export default function HomePage() {
           <span className="font-display text-5xl leading-none tracking-wide text-volt-500">
             PITCH<span className="text-white">KICK</span>
           </span>
-          <span className="hidden sm:inline font-heading uppercase text-xs tracking-[0.3em] text-night-600">
+          <span className="hidden sm:inline font-heading uppercase text-xs tracking-[0.3em] text-night-300">
             Arcade Football
           </span>
         </div>
@@ -146,14 +146,14 @@ export default function HomePage() {
           <div className="flex items-center gap-4">
             <button
               onClick={handleRematch}
-              className="flex items-center gap-2 font-heading uppercase text-sm tracking-wider text-night-600 hover:text-volt-400 transition-colors"
+              className="flex items-center gap-2 font-heading uppercase text-sm tracking-wider text-night-300 hover:text-volt-400 transition-colors"
             >
               <RotateCcw size={16} />
               Rematch
             </button>
             <button
               onClick={handleRestart}
-              className="flex items-center gap-2 font-heading uppercase text-sm tracking-wider text-night-600 hover:text-volt-400 transition-colors"
+              className="flex items-center gap-2 font-heading uppercase text-sm tracking-wider text-night-300 hover:text-volt-400 transition-colors"
             >
               Change teams
             </button>
@@ -184,7 +184,7 @@ export default function HomePage() {
             <span className="flex items-center px-2.5 bg-night-950/95 text-white text-base tabular-nums font-display">
               {hud.homeScore}
             </span>
-            <span className="flex items-center bg-night-950/95 text-night-600 text-xs">
+            <span className="flex items-center bg-night-950/95 text-night-300 text-xs">
               –
             </span>
             <span className="flex items-center px-2.5 bg-night-950/95 text-white text-base tabular-nums font-display">
@@ -242,7 +242,7 @@ export default function HomePage() {
             <h1 className="font-display text-6xl sm:text-7xl text-white tracking-wide mb-2">
               READY TO <span className="text-volt-500">KICK OFF?</span>
             </h1>
-            <p className="font-body text-night-600 mb-8 text-center max-w-md">
+            <p className="font-body text-night-300 mb-8 text-center max-w-md">
               Pick your nation, then the CPU's — full 11v11 with real squads and
               formations, the TV camera follows the ball. Your active player wears
               the solid ▼ marker; a hollow ▽ hints who{' '}
@@ -264,7 +264,7 @@ export default function HomePage() {
             <h2 className="font-display text-4xl sm:text-5xl text-white tracking-wide mb-1">
               SELECT <span className="text-volt-500">TEAMS</span>
             </h2>
-            <p className="font-body text-night-600 text-sm mb-4 text-center">
+            <p className="font-body text-night-300 text-sm mb-4 text-center">
               <span className="text-volt-400 font-semibold">← →</span> to choose
               ·{' '}
               <span className="text-volt-400 font-semibold">Enter / S / D</span>{' '}
@@ -278,7 +278,7 @@ export default function HomePage() {
                 active={activeSide === 'home'}
                 locked={activeSide === 'away'}
               />
-              <div className="flex items-center font-display text-3xl text-night-700">
+              <div className="flex items-center font-display text-3xl text-night-500">
                 VS
               </div>
               <TeamCrest
@@ -302,14 +302,14 @@ export default function HomePage() {
             <kbd className="font-heading text-volt-400 text-base tracking-wider">
               {c.keys}
             </kbd>
-            <span className="font-body text-xs text-night-600 uppercase tracking-wide">
+            <span className="font-body text-xs text-night-300 uppercase tracking-wide">
               {c.label}
             </span>
           </div>
         ))}
       </div>
 
-      <p className="mt-5 text-xs text-night-700 font-body text-center max-w-xl">
+      <p className="mt-5 text-xs text-night-300 font-body text-center max-w-xl">
         Tip: hold a pass/shot key to charge the power gauge, release to kick —
         a quick tap plays it soft. Defending: tap{' '}
         <span className="text-volt-400">D</span> for a standing tackle, hold{' '}
@@ -343,14 +343,14 @@ function FixtureBanner({ match }: { match: Match }) {
       >
         {live ? 'Live now' : 'Next up'}
       </span>
-      <span className="font-heading uppercase tracking-wider text-xs text-night-600">
+      <span className="font-heading uppercase tracking-wider text-xs text-night-300">
         WC&nbsp;2026 · Group&nbsp;{match.group}
       </span>
-      <span className="hidden sm:inline font-body text-xs text-night-600">·</span>
+      <span className="hidden sm:inline font-body text-xs text-night-300">·</span>
       <span className="hidden sm:inline font-body text-xs text-night-500 truncate max-w-[18ch]">
         {match.venue}
       </span>
-      <span className="font-body text-xs text-night-600">·</span>
+      <span className="font-body text-xs text-night-300">·</span>
       <span className="font-body text-xs text-white tabular-nums">{time}</span>
     </div>
   );
@@ -371,7 +371,7 @@ function TeamCrest({
     <div className="flex flex-col items-center gap-3 w-44 sm:w-52">
       <span
         className={`font-heading uppercase tracking-[0.3em] text-xs ${
-          active ? 'text-volt-400' : 'text-night-600'
+          active ? 'text-volt-400' : 'text-night-300'
         }`}
       >
         {tag}
