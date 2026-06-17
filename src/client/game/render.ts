@@ -461,17 +461,42 @@ function drawGoalBack(
   const bnBot = { x: backNear.x, y: backNear.y };
   const bnTop = { x: backNear.x, y: backNear.y - postH(backNear.s) * 0.82 };
 
-  // Ripple: bulge the back panel outward (away from the pitch) and wobble it
-  // for a moment after the ball hits. Pinned at the frame edges (sin shape).
+  // Ripple: when the ball hits, the WHOLE net shudders for a moment — back,
+  // roof and both sides. Each panel is pinned to the rigid frame (posts,
+  // crossbar, front mouth) and billows most toward the back where the ball
+  // struck. `out` = away from the pitch; `wobAt` is the travelling shimmer.
   const out = side === 'left' ? -1 : 1;
   const tnow = performance.now() / 1000;
-  const amp = ripple * 16;
-  const backDisp = ripple > 0.001
+  const active = ripple > 0.001;
+  const wobAt = (phase: number) => Math.cos(tnow * 26 - phase) * 0.5 + 0.6;
+
+  // Back panel: bulges outward + sags down, bell-shaped (pinned all 4 edges).
+  const backDisp = active
     ? (u: number, v: number) => {
-        const shape = Math.sin(Math.PI * u) * Math.sin(Math.PI * Math.min(1, v + 0.15));
-        const wob = Math.cos(tnow * 26 - u * 4) * 0.5 + 0.6;
-        const k = amp * shape * wob;
+        const shape =
+          Math.sin(Math.PI * u) * Math.sin(Math.PI * Math.min(1, v + 0.15));
+        const k = ripple * 16 * shape * wobAt(u * 4);
         return { x: out * k, y: k * 0.35 };
+      }
+    : undefined;
+
+  // Roof: u = far→near, v = front(crossbar)→back. Sags down, pinned at the
+  // crossbar (v=0) and the far/near edges, deepest toward the back.
+  const roofDisp = active
+    ? (u: number, v: number) => {
+        const shape = Math.sin(Math.PI * u) * v;
+        const k = ripple * 13 * shape * wobAt(u * 4 + 1);
+        return { x: out * k * 0.4, y: k * 0.8 };
+      }
+    : undefined;
+
+  // Sides: u = front(post)→back, v = bottom→top. Billow outward + flutter,
+  // pinned at the front post (u=0) and top/bottom rails, strongest at the back.
+  const sideDisp = active
+    ? (u: number, v: number) => {
+        const shape = u * Math.sin(Math.PI * v);
+        const k = ripple * 12 * shape * wobAt(u * 4 + 2);
+        return { x: out * k * 0.7, y: k * 0.4 };
       }
     : undefined;
 
@@ -479,16 +504,16 @@ function drawGoalBack(
   ctx.lineWidth = 1;
   ctx.lineJoin = 'round';
 
-  // Back panel (the one that ripples).
+  // Back panel.
   netMesh(ctx, bfBot, bnBot, bfTop, bnTop, 6, 4, backDisp);
   // Roof panel (crossbar → back-top).
-  netMesh(ctx, fTop, nTop, bfTop, bnTop, 5, 3);
+  netMesh(ctx, fTop, nTop, bfTop, bnTop, 5, 3, roofDisp);
   // Far side panel (far post → back-far).
   ctx.strokeStyle = 'rgba(255,255,255,0.22)';
-  netMesh(ctx, fBot, bfBot, fTop, bfTop, 3, 4);
+  netMesh(ctx, fBot, bfBot, fTop, bfTop, 3, 4, sideDisp);
   // Near side panel (near post → back-near) — closest to camera, brighter.
   ctx.strokeStyle = 'rgba(255,255,255,0.34)';
-  netMesh(ctx, nBot, bnBot, nTop, bnTop, 3, 4);
+  netMesh(ctx, nBot, bnBot, nTop, bnTop, 3, 4, sideDisp);
 }
 
 function drawGoalFront(ctx: CanvasRenderingContext2D, side: 'left' | 'right') {

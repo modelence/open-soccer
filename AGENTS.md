@@ -310,9 +310,11 @@ game state yet (no Stores/queries for gameplay).
   tn,nu,nv,disp?)` (+`bilerp` of 4 screen corners) — back panel + roof +
   far-side + near-side, net sloping to 0.82 height at the back. HIT RIPPLE:
   engine `netRipple{left,right}` (0..1, decays ~0.6/s) passed in Scene;
-  `startCelebration` bumps the scored side to 1; back panel displaces outward
-  (sign per side) + downward with a sin(πu)·sin(πv) bell × cos wobble
-  (performance.now()), pinned at edges.
+  `startCelebration` bumps the scored side to 1; ALL FOUR panels displace via
+  per-panel disp fns sharing `wobAt(phase)` cos shimmer: back = sin(πu)·sin(πv)
+  bell out+down; roof = sin(πu)·v sag (pinned crossbar, deepest at back); sides
+  = u·sin(πv) billow out+flutter (pinned post/rails, strongest at back). All
+  pinned to the rigid frame, sign per `out` = side.
 - GEOMETRY FIX (user: posts/boxes floated off the field line): the projection
   maps a CONSTANT-X field line (goal line, halfway, box depth-edge) to a BOWED
   curve, but they were drawn as straight 2-pt chords while posts sit at true
