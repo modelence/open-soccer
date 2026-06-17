@@ -408,6 +408,13 @@ game state yet (no Stores/queries for gameplay).
   mob behind) + `updateCamera` while frozen, then `resetKickoff(pendingKickoff)`
   when it expires. `drawHumanoid` raises BOTH arms above the head when
   `p.celebrating`. `PlayerEntity.celebrating?:boolean` in types.ts.
+  CONCEDING SIDE NOT FROZEN (added after "opponent players freeze completely
+  during celebration"): updateCelebration now loops ALL players, not just the
+  scoring team. Non-celebrating players (the whole conceding team + the scoring
+  keeper) walk back toward their formation `anchor` at WALK_SPEED*0.6 (slow,
+  dejected) instead of standing still; the conceding keeper instead drifts
+  toward the ball in the net (retrieving it). `concededTeam = (p.team==='home')
+  !== scoredRight`.
 - Stadium dressing: gradient sky, deterministic crowd dots, PITCHKICK
   hoarding strip above far touchline.
 - Ball + players depth-sorted together into one draw list (ball is a

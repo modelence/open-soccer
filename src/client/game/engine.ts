@@ -2281,23 +2281,38 @@ export class PitchKickGame {
   }
 
   /** Animate the celebrating players: the scorer wheels away toward the corner
-   *  by the goal, arms aloft, and teammates chase to mob them. */
+   *  by the goal, arms aloft, and teammates chase to mob them. The conceding
+   *  side doesn't freeze — they trudge back toward their own positions,
+   *  dejected, while their keeper retrieves the ball from the net. */
   private updateCelebration(dt: number) {
     if (!this.celebrateTeam) return;
-    const team = this.celebrateTeam === 'home' ? this.homePlayers : this.awayPlayers;
     const scoredRight = this.celebrateTeam === 'home';
     const cornerX = scoredRight ? FIELD_W - M(16) : M(16);
     const cornerY = FIELD_H * 0.82;
-    for (const p of team) {
-      if (!p.celebrating) continue;
-      let tx = cornerX;
-      let ty = cornerY;
-      if (this.scorer && p !== this.scorer) {
-        // Teammates converge just behind the scorer.
-        tx = this.scorer.x + (scoredRight ? -34 : 34);
-        ty = this.scorer.y - 6;
+
+    for (const p of [...this.homePlayers, ...this.awayPlayers]) {
+      if (p.celebrating) {
+        // Scoring side: wheel away to the corner / mob the scorer.
+        let tx = cornerX;
+        let ty = cornerY;
+        if (this.scorer && p !== this.scorer) {
+          tx = this.scorer.x + (scoredRight ? -34 : 34);
+          ty = this.scorer.y - 6;
+        }
+        this.moveToward(p, { x: tx, y: ty }, RUN_SPEED * 0.62, dt);
+      } else {
+        // Everyone else (the conceding team + the scoring keeper): walk back
+        // toward their formation anchor at a slow, dejected pace instead of
+        // standing frozen. The conceding keeper drifts toward the ball in the
+        // net as if collecting it to restart quickly.
+        const concededTeam =
+          (p.team === 'home') !== scoredRight; // true if p just conceded
+        let target = p.anchor;
+        if (p.isGK && concededTeam) {
+          target = { x: this.ball.x, y: this.ball.y };
+        }
+        this.moveToward(p, target, WALK_SPEED * 0.6, dt);
       }
-      this.moveToward(p, { x: tx, y: ty }, RUN_SPEED * 0.62, dt);
     }
   }
 
