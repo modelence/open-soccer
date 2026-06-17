@@ -29,6 +29,12 @@ export interface PlayerEntity {
   name: string;
   /** > 0 while playing the goal-celebration pose (arms raised). */
   celebrating?: boolean;
+  /** > 0 while a keeper is playing the dive/save pose (full-body lay-out). */
+  diveTimer?: number;
+  /** Direction of the current dive along the goal mouth (world-y sign). */
+  diveDir?: number;
+  /** Lockout so a keeper doesn't re-trigger a dive every frame. */
+  diveCooldown?: number;
 }
 
 export interface HudState {

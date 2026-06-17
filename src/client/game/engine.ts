@@ -256,6 +256,8 @@ export class PitchKickGame {
       p.vx = p.vy = 0;
       p.kickTimer = 0;
       p.celebrating = false;
+      p.diveTimer = 0;
+      p.diveCooldown = 0;
       p.facing = { x: p.team === 'home' ? 1 : -1, y: 0 };
     }
 
@@ -418,6 +420,8 @@ export class PitchKickGame {
     }
     for (const p of [...this.homePlayers, ...this.awayPlayers]) {
       if (p.kickTimer > 0) p.kickTimer -= dt;
+      if (p.diveTimer && p.diveTimer > 0) p.diveTimer -= dt;
+      if (p.diveCooldown && p.diveCooldown > 0) p.diveCooldown -= dt;
     }
     if (this.netRipple.left > 0) this.netRipple.left = Math.max(0, this.netRipple.left - dt * 0.6);
     if (this.netRipple.right > 0) this.netRipple.right = Math.max(0, this.netRipple.right - dt * 0.6);
@@ -474,6 +478,7 @@ export class PitchKickGame {
     this.constrainKeeperWithBall();
     this.updateJostle(dt);
     this.resolvePossession();
+    this.updateKeeperReactions(dt);
     this.updateBall(dt);
     this.handleGoals();
     this.updateCamera(dt);
@@ -937,9 +942,11 @@ export class PitchKickGame {
     // (~2.2x the base). Harder shots rise more — a full blast lifts toward
     // the top corners, while a placed side-foot stays low and grounded.
     const loft = M(0.6) + charge * M(7);
-    // Shots scatter the most — a harder strike (more charge) is less precise,
-    // so a power blast can flash just wide while a placed side-foot is tighter.
-    const shotSpread = 0.05 + charge * 0.045;
+    // Shots scatter — and the harder you hit it, the LESS precise it is (FIFA:
+    // a power blast can fly wide of the post, while a placed side-foot is far
+    // tighter). The charge term dominates so full-power efforts genuinely miss
+    // the target a fair share of the time.
+    const shotSpread = 0.06 + charge * 0.2;
     this.kickBallToward(
       { x: goalX, y: bestY },
       620 + 720 * charge,
@@ -2141,7 +2148,14 @@ export class PitchKickGame {
         // Start the hold-in-hands clock fresh on a NEW catch so the keeper
         // visibly gathers and holds the ball before he distributes (instead of
         // booting it the instant he touches it with a stale timer).
-        if (best !== prev) this.gkHoldTimer = 0;
+        if (best !== prev) {
+          this.gkHoldTimer = 0;
+          // An off-centre catch is a diving save — play the dive pose toward it.
+          const off = this.ball.y - best.y;
+          if (Math.abs(off) > 14 && (best.diveTimer ?? 0) <= 0) {
+            this.triggerKeeperDive(best, Math.sign(off));
+          }
+        }
       }
       this.dribble(best);
       // Receiving a pass clears the kicker lock so play flows.
@@ -2212,6 +2226,47 @@ export class PitchKickGame {
     return gk.r + this.ball.r + buffer;
   }
 
+  /** Make a keeper visibly REACT to an incoming shot: throw himself across the
+   *  goal toward where the ball is heading. Fires whenever a struck ball is
+   *  bearing down on his goal and is laterally off-centre from him — so he
+   *  dives EVEN ON SHOTS HE WON'T REACH (he commits and is beaten), not just on
+   *  ones he saves. A ball hit straight at him is taken standing (no dive). */
+  private updateKeeperReactions(dt: number) {
+    void dt;
+    if (this.owner) return; // ball is held — no shot in flight
+    const ballSpeed = Math.hypot(this.ball.vx, this.ball.vy);
+    if (ballSpeed < 420) return; // only react to genuine shots
+    for (const gk of [this.homePlayers[0], this.awayPlayers[0]]) {
+      if (!gk) continue;
+      if ((gk.diveTimer ?? 0) > 0 || (gk.diveCooldown ?? 0) > 0) continue;
+      const ownGoalX = gk.team === 'home' ? 0 : FIELD_W;
+      // Ball must be travelling toward THIS keeper's goal.
+      const towardGoal =
+        gk.team === 'home' ? this.ball.vx < -60 : this.ball.vx > 60;
+      if (!towardGoal) continue;
+      // Only once the shot is near his goal and close to him laterally.
+      const ballDX = Math.abs(this.ball.x - ownGoalX);
+      if (ballDX > M(20)) continue;
+      const d = dist(gk, this.ball);
+      if (d > 95) continue; // react as it arrives in his vicinity
+      const off = this.ball.y - gk.y;
+      // Hit basically at him → no dive needed, he gathers standing.
+      if (Math.abs(off) < 12) continue;
+      this.triggerKeeperDive(gk, Math.sign(off));
+    }
+  }
+
+  /** Commit a keeper to a dive toward `dir` (world-y sign) and lunge his body
+   *  that way so the save attempt reads on screen. */
+  private triggerKeeperDive(gk: PlayerEntity, dir: number) {
+    gk.diveTimer = 0.6;
+    gk.diveDir = dir || 1;
+    gk.diveCooldown = 0.9;
+    // A modest lunge toward the ball's path — extends his frame so the dive
+    // looks committed without magically vacuuming the ball in.
+    gk.vy += dir * 90;
+  }
+
   /** A keeper can't cleanly hold a fiercely-struck shot. He gets a hand/body
    *  to it and PARRIES it away to the side (toward the nearer touchline), so
    *  the ball spills WIDE and away from goal — never sticking to his hands and
@@ -2232,8 +2287,9 @@ export class PitchKickGame {
     // on the same frame.
     this.ball.x = gk.x + outSign * (gk.r + this.ball.r + 5);
     this.ball.y += side * (gk.r + 4);
-    // Keeper throws himself toward the shot.
+    // Keeper throws himself toward the shot — full dive pose if he had to reach.
     gk.facing = { x: outSign, y: side };
+    if ((gk.diveTimer ?? 0) <= 0) this.triggerKeeperDive(gk, side);
     // Nobody owns the parried ball; lock out an instant re-gather so it spills
     // clear (a striker has to run onto the loose rebound).
     this.owner = null;

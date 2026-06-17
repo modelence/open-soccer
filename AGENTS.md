@@ -362,6 +362,28 @@ game state yet (no Stores/queries for gameplay).
     (positioning) and the catch(<=820)/parry(>820) split: weak shots within reach
     are caught & held, fierce shots within reach are parried wide, and shots he
     can't react to beat him cleanly.
+  KEEPER DIVE REACTION + WIDER SHOT SPREAD (added after "the GK doesn't react on
+  shots — I want him to dive or else; and shots are way too precise, no shots go
+  wide, stronger shots should have even more chance to miss — like FIFA"):
+  - DIVE ANIMATION: new PlayerEntity fields `diveTimer` (>0 while in the lay-out
+    save pose, set 0.6s), `diveDir` (world-y sign of the dive), `diveCooldown`
+    (0.9s lockout so he can't re-trigger every frame). Decremented in `update()`,
+    reset in `resetKickoff`. `triggerKeeperDive(gk, dir)` sets the timers and adds
+    a one-frame lunge impulse `gk.vy += dir*90` (survives ~1 frame before steer
+    lerps it back). `updateKeeperReactions(dt)` runs in the sim loop AFTER team
+    updates + resolvePossession: when the ball is loose, fast (>420), travelling
+    toward a keeper's own goal, within M(20) of the goal line and within 95px of
+    the keeper but >12px off-centre, he dives toward it — EVEN shots he won't
+    reach (visible reaction, beaten cleanly). Dives also fire on off-centre
+    catches (resolvePossession) and on every parry (`keeperParry`).
+  - DIVE RENDER (drawHumanoid): `diveLayout` (eased 0..1 body commitment) and
+    `diveAirborne` (sin arc) drive a body translate+rotate toward diveDir, an
+    upward lift, a fading/offset shadow, and overhead reaching arms (reuses the
+    `celebrating` arm pose while diving & not kicking).
+  - WIDER SHOT SPREAD (shootAssisted): `shotSpread = 0.06 + charge*0.2` (was
+    `0.05 + charge*0.045`). Spread is triangular angular noise in kickBallToward,
+    so untapped shots are fairly accurate but full-power blasts genuinely sail
+    wide — strong shots have much more chance to miss, FIFA-style.
 - PASS-LANE OPENNESS (added after "passes go straight into the opponent"):
   receiver selection now also scores how OPEN the passing lane is, not just
   alignment+distance. For ground passes (short/through, NOT lofted long) each

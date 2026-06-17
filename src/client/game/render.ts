@@ -607,6 +607,14 @@ function drawHumanoid(
   const moving = speed > 30;
   const swing = moving ? Math.sin(p.animPhase) : 0;
   const kicking = p.kickTimer > 0;
+  // Keeper dive: a full-body lay-out toward diveDir. Progress ramps the body
+  // from upright to horizontal and lifts it off the turf (an airborne arc that
+  // rises then lands over the ~0.6s pose).
+  const diving = (p.diveTimer ?? 0) > 0;
+  const diveDir = p.diveDir ?? 1;
+  const diveT = diving ? clamp(1 - (p.diveTimer ?? 0) / 0.6, 0, 1) : 0;
+  const diveLayout = diving ? Math.sin(Math.min(diveT * 1.3, 1) * (Math.PI / 2)) : 0;
+  const diveAirborne = diving ? Math.sin(Math.min(diveT, 1) * Math.PI) : 0;
 
   const fx = p.facing.x;
   const fy = p.facing.y;
@@ -618,18 +626,32 @@ function drawHumanoid(
   // Ground decorations (not scaled by ctx transform — drawn in screen px).
   const gs = s * PLAYER_SCALE;
 
-  // Shadow.
-  ctx.fillStyle = 'rgba(0,0,0,0.28)';
+  // Shadow (fades and spreads as a diving keeper leaves the ground).
+  ctx.fillStyle = `rgba(0,0,0,${0.28 - diveAirborne * 0.18})`;
   ctx.beginPath();
-  ctx.ellipse(q.x + 2 * gs, q.y + 1.5 * gs, 11 * gs, 4 * gs, 0, 0, Math.PI * 2);
+  ctx.ellipse(
+    q.x + 2 * gs + diveDir * diveLayout * 12 * gs,
+    q.y + 1.5 * gs,
+    (11 + diveLayout * 6) * gs,
+    4 * gs,
+    0,
+    0,
+    Math.PI * 2,
+  );
   ctx.fill();
 
   ctx.save();
   ctx.translate(q.x, q.y);
   ctx.scale(gs, gs);
-  // Lean into the run direction for a sense of momentum.
-  const lean = moving ? clamp(p.vx / SPRINT_SPEED, -1, 1) * 0.13 : 0;
-  ctx.rotate(lean);
+  if (diving) {
+    // Lay the body out toward the dive side and lift it into the air.
+    ctx.translate(diveDir * diveLayout * 11, -diveAirborne * 9);
+    ctx.rotate(diveDir * diveLayout * 1.4);
+  } else {
+    // Lean into the run direction for a sense of momentum.
+    const lean = moving ? clamp(p.vx / SPRINT_SPEED, -1, 1) * 0.13 : 0;
+    ctx.rotate(lean);
+  }
 
   // Anatomy anchors in REAL human proportion (figure ≈ 7.5 heads tall).
   // Crotch sits near mid-height (legs ≈ 0.47H ≈ 0.87m), shoulders at 0.82H
@@ -786,7 +808,9 @@ function drawHumanoid(
   ctx.stroke();
 
   // Arms (counter-swing). Far arm behind torso, near arm in front.
-  const celebrating = !!p.celebrating && !kicking;
+  // A diving keeper reaches both arms out overhead toward the ball, like a
+  // celebration pose but rotated with the laid-out body.
+  const celebrating = (!!p.celebrating || diving) && !kicking;
   const armSwing = kicking ? 6 : -swing * 5;
   const drawArm = (dir: number, swingAmt: number) => {
     ctx.strokeStyle = kit.sleeve;
