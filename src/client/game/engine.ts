@@ -2131,6 +2131,23 @@ export class PitchKickGame {
       return;
     }
 
+    // OUTFIELD BLOCK: a fiercely-struck ball can't be cleanly trapped or
+    // "tackled" out of the air by a field player standing in its path — it
+    // ricochets off his body/legs. So when a fast ball (a shot or a driven
+    // ball) first reaches an OPPONENT of the kicker (or a loose fast ball), it
+    // DEFLECTS away as a loose rebound instead of sticking to him. Slower balls
+    // (settled passes, decayed shots) are still cleanly intercepted/received.
+    if (
+      best &&
+      !best.isGK &&
+      best !== prev &&
+      (!prev || prev.team !== best.team) &&
+      ballSpeed > 600
+    ) {
+      this.outfieldBlock(best, ballSpeed);
+      return;
+    }
+
     this.owner = best;
     if (best) {
       // FIFA-style: when YOUR team gains possession, you control the man on the
@@ -2172,7 +2189,9 @@ export class PitchKickGame {
     // animation) and is glued there — it never squirts out in front toward an
     // onrushing striker. Held at M(0.95) (below CONTROL_HEIGHT so he keeps it).
     if (owner.isGK) {
-      const hold = owner.r + this.ball.r + 3;
+      // Held tight against the chest — a small forward offset so the ball reads
+      // as cradled in his hands, not floating out in front of him.
+      const hold = owner.r * 0.25;
       const tx = owner.x + owner.facing.x * hold;
       const ty = owner.y + owner.facing.y * hold;
       const handZ = M(0.95);
@@ -2294,6 +2313,29 @@ export class PitchKickGame {
     // clear (a striker has to run onto the loose rebound).
     this.owner = null;
     this.ballFree = 0.45;
+    this.lastKicker = null;
+    this.kickerLock = 0;
+    this.passReceiver = null;
+  }
+
+  /** A field player in the path of a fierce ball can't trap it — it ricochets
+   *  off his body. The rebound scatters (mostly back off him, with a random
+   *  sideways spray) at much-reduced pace and becomes a loose ball anyone can
+   *  chase. This stops defenders "tackling" a shot clean out of the air. */
+  private outfieldBlock(blocker: PlayerEntity, ballSpeed: number) {
+    // Deflect roughly back off the body, scattered to a random side.
+    const baseAng = Math.atan2(-this.ball.vy, -this.ball.vx);
+    const ang = baseAng + (Math.random() - Math.random()) * 1.3;
+    const speed = clamp(ballSpeed * 0.4, 140, 420);
+    this.ball.vx = Math.cos(ang) * speed;
+    this.ball.vy = Math.sin(ang) * speed;
+    this.ball.vz = M(1.0) * Math.random();
+    // Nudge the ball off the blocker's body so it doesn't re-collide instantly.
+    this.ball.x = blocker.x + Math.cos(ang) * (blocker.r + this.ball.r + 4);
+    this.ball.y = blocker.y + Math.sin(ang) * (blocker.r + this.ball.r + 4);
+    // Loose rebound — nobody owns it; brief lockout so it spills clear.
+    this.owner = null;
+    this.ballFree = 0.3;
     this.lastKicker = null;
     this.kickerLock = 0;
     this.passReceiver = null;

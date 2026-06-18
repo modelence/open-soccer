@@ -390,6 +390,22 @@ game state yet (no Stores/queries for gameplay).
     `0.05 + charge*0.045`). Spread is triangular angular noise in kickBallToward,
     so untapped shots are fairly accurate but full-power blasts genuinely sail
     wide — strong shots have much more chance to miss, FIFA-style.
+  HELD-BALL HUG + OUTFIELD SHOT BLOCK (added after "the GK holds the ball too far
+  from his body; and strong shots at defenders get tackled into their possession
+  instead of rebounding — strong shots can't be instantly tackled"):
+  - HELD-BALL HUG: in `dribble()` the GK-in-hands forward offset was
+    `owner.r + ball.r + 3` (≈16px out front, looked detached). Now `owner.r*0.25`
+    (≈3px) so the ball reads as cradled against the chest. Still lifted to
+    handZ=M(0.95).
+  - OUTFIELD SHOT BLOCK (`outfieldBlock`): in resolvePossession, BEFORE
+    `owner = best`, a field player (non-GK) who FIRST reaches a fast ball
+    (ballSpeed > 600) as an OPPONENT of the kicker (or a loose fast ball) no
+    longer cleanly traps/"tackles" it — it RICOCHETS off him as a loose rebound:
+    deflected roughly back off the body (`atan2(-vy,-vx)`) + random ±1.3rad
+    scatter, speed = `clamp(ballSpeed*0.4,140,420)`, small vz pop, nudged off his
+    body, `owner=null`, `ballFree=0.3`. Slower balls (<600 — settled passes,
+    decayed shots, in-lane interceptions which arrive ~240-550) are still cleanly
+    received/intercepted. Parallels keeperParry (>820) but for field players.
 - PASS-LANE OPENNESS (added after "passes go straight into the opponent"):
   receiver selection now also scores how OPEN the passing lane is, not just
   alignment+distance. For ground passes (short/through, NOT lofted long) each
