@@ -391,9 +391,23 @@ game state yet (no Stores/queries for gameplay).
     uses live `ball.y - gk.y`; resolvePossession catch branch same; keeperParry
     captures `incomingOff` BEFORE it repositions the ball, dives toward it.)
   - DIVE RENDER (drawHumanoid): `diveLayout` (eased 0..1 body commitment) and
-    `diveAirborne` (sin arc) drive a body translate+rotate toward diveDir, an
-    upward lift, a fading/offset shadow, and overhead reaching arms (reuses the
-    `celebrating` arm pose while diving & not kicking).
+    `diveAirborne` (sin arc) drive a body translate+rotate, an upward lift, a
+    fading/offset shadow, and overhead reaching arms (reuses the `celebrating`
+    arm pose while diving & not kicking).
+    DIVE-DIRECTION FIX (added after "the dive sometimes goes diagonally BACK —
+    keepers should dive PERPENDICULAR to the shot, not reach back for an already
+    missed ball"): the keeper dives along the GOAL MOUTH = world-y, which is
+    perpendicular to the shot (world-x). But `proj` maps world-x→screen-x and
+    world-y→screen-y, so the old render — which laid the body out along screen-x
+    (`translate(diveDir*diveLayout*11,…)`, `rotate(diveDir*…*1.4)`) — was diving
+    along the SHOT LINE (forward/back), and half the dives (diveDir=+1) threw him
+    back toward his own goal. FIX: project the goal-mouth direction into screen
+    space — `proj(p.x, p.y + diveDir*40)` minus `proj(p.x,p.y)`, normalized to
+    `(diveSx,diveSy)` — and translate the body + shadow ALONG that vector
+    (`translate(diveSx*diveLayout*13, diveSy*diveLayout*13 - diveAirborne*9)`),
+    rotating/laying out by the horizontal component only (`rotate(diveSx*
+    diveLayout*1.5)`) so a sideways dive lays out fully while an up/down-the-mouth
+    dive reads as a leap with a gentle lean. No more diving back along the shot.
   - WIDER SHOT SPREAD (shootAssisted): `shotSpread = 0.06 + charge*0.2` (was
     `0.05 + charge*0.045`). Spread is triangular angular noise in kickBallToward,
     so untapped shots are fairly accurate but full-power blasts genuinely sail

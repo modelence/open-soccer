@@ -615,6 +615,20 @@ function drawHumanoid(
   const diveT = diving ? clamp(1 - (p.diveTimer ?? 0) / 0.6, 0, 1) : 0;
   const diveLayout = diving ? Math.sin(Math.min(diveT * 1.3, 1) * (Math.PI / 2)) : 0;
   const diveAirborne = diving ? Math.sin(Math.min(diveT, 1) * Math.PI) : 0;
+  // The keeper dives ALONG THE GOAL MOUTH (world-y), which is perpendicular to
+  // the shot (world-x). The TV camera renders world-y as (mostly) the vertical
+  // screen axis, so we must lay the body out along the *projected* goal-mouth
+  // direction — NOT along screen-x, which would be diving back along the shot.
+  let diveSx = 0;
+  let diveSy = 0;
+  if (diving) {
+    const qd = proj(p.x, p.y + diveDir * 40);
+    diveSx = qd.x - q.x;
+    diveSy = qd.y - q.y;
+    const dl = Math.hypot(diveSx, diveSy) || 1;
+    diveSx /= dl;
+    diveSy /= dl;
+  }
 
   const fx = p.facing.x;
   const fy = p.facing.y;
@@ -630,10 +644,10 @@ function drawHumanoid(
   ctx.fillStyle = `rgba(0,0,0,${0.28 - diveAirborne * 0.18})`;
   ctx.beginPath();
   ctx.ellipse(
-    q.x + 2 * gs + diveDir * diveLayout * 12 * gs,
-    q.y + 1.5 * gs,
-    (11 + diveLayout * 6) * gs,
-    4 * gs,
+    q.x + 2 * gs + diveSx * diveLayout * 13 * gs,
+    q.y + 1.5 * gs + diveSy * diveLayout * 13 * gs,
+    (11 + Math.abs(diveSx) * diveLayout * 6) * gs,
+    (4 + Math.abs(diveSy) * diveLayout * 3) * gs,
     0,
     0,
     Math.PI * 2,
@@ -644,9 +658,12 @@ function drawHumanoid(
   ctx.translate(q.x, q.y);
   ctx.scale(gs, gs);
   if (diving) {
-    // Lay the body out toward the dive side and lift it into the air.
-    ctx.translate(diveDir * diveLayout * 11, -diveAirborne * 9);
-    ctx.rotate(diveDir * diveLayout * 1.4);
+    // Leap along the projected goal-mouth direction (perpendicular to the shot)
+    // and lift the body off the turf. The body tilts toward the dive side; the
+    // sideways component drives a full lay-out, while a dive up/down the mouth
+    // (small screen-x component) reads as a leap with a gentle lean.
+    ctx.translate(diveSx * diveLayout * 13, diveSy * diveLayout * 13 - diveAirborne * 9);
+    ctx.rotate(diveSx * diveLayout * 1.5);
   } else {
     // Lean into the run direction for a sense of momentum.
     const lean = moving ? clamp(p.vx / SPRINT_SPEED, -1, 1) * 0.13 : 0;
