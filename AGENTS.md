@@ -738,8 +738,9 @@ game state yet (no Stores/queries for gameplay).
   from `lastKicker` which CLEARS on possession, so it survives a loose ball going
   out. `checkOutOfPlay()`:
   - TOUCHLINE (b.y<0 || b.y>FIELD_H) → THROW-IN to the team that did NOT touch it
-    last, at the exit point (spotX clamped M(3)..FIELD_W-M(3)). Label
-    `THROW-IN · <TEAM>`, taker is nearest outfielder.
+    last, at the exit point (spotX clamped M(3)..FIELD_W-M(3)), taker is nearest
+    outfielder. NO banner text (awardRestart called with empty label → setMessage
+    skipped). Taken with the HANDS (see THROW-IN BY HAND below), not a kick.
   - BYLINE (b.x<0 || b.x>FIELD_W): if the ball is in the goal mouth (goalTop<y<
     goalBottom) AND under the bar (z<=M(2.44)) it RETURNS EARLY — that's a GOAL,
     handleGoals (runs after updateBall) scores it; do NOT misread it as out. Else:
@@ -748,14 +749,32 @@ game state yet (no Stores/queries for gameplay).
     (spot at the goal-line corner, M(1) from the near touchline), taker nearest
     outfielder. attackingTeam attacks that goal: left line (x<0) ← away attacks,
     right line ← home attacks.
-  - `awardRestart(team, spotX, spotY, label, takerIsGK)`: stops the ball dead at
-    the spot, zeroes ALL players' momentum + kick/dive timers, picks nearest taker
-    (GK pool if takerIsGK else outfield) and places them just behind the ball,
-    sets owner=taker, controlled = home taker (else home kickoffFwd), pans camera,
-    `setMessage(label,1.6)`, `freeze=0.9`, and clears all transient state
-    (lastKicker, kickerLock, stealProtect=1.0, dispossessed, offside flags,
-    marks, ballFree, jostle, tackle/charge timers, gkRush, passReceiver) plus
-    lastTouchTeam=team. Modeled on the callOffside restart pattern.
+  - `awardRestart(team, spotX, spotY, label, takerIsGK, isThrowIn=false)`: stops
+    the ball dead at the spot, zeroes ALL players' momentum + kick/dive/throwing
+    timers, picks nearest taker (GK pool if takerIsGK else outfield) and places
+    them just behind the ball, sets owner=taker, controlled = home taker (else
+    home kickoffFwd), pans camera, `setMessage(label,1.6)` ONLY if label is
+    non-empty, `freeze=0.9`, sets `throwInTaker = isThrowIn ? taker : null` +
+    `taker.throwing`, and clears all transient state (lastKicker, kickerLock,
+    stealProtect=1.0, dispossessed, offside flags, marks, ballFree, jostle,
+    tackle/charge timers, gkRush, passReceiver) plus lastTouchTeam=team. Modeled
+    on the callOffside restart pattern.
+  - THROW-IN BY HAND (added after "the throw should be with hands, not feet; and
+    no text announcement"): a throw-in is NOT a foot kick. New field
+    `throwInTaker: PlayerEntity|null` + `PlayerEntity.throwing?:boolean`.
+    While `owner === throwInTaker`, `dribble()` holds the ball OVERHEAD in both
+    hands (lerps ball to the taker's position, z→M(2.1)); resolvePossession's
+    high-ball early-return (`z > CONTROL_HEIGHT`) is skipped for the throwInTaker
+    so he keeps the overhead ball. `drawHumanoid` raises both arms (reuses the
+    celebrating/dive arm-up pose) when `p.throwing`. RELEASE: `executeThrowIn(
+    thrower, isHome)` — intercepted at the TOP of `doHomeKick` (user, any kick
+    key → throw, isHome=true) and at the top of `updateAwayCarrier` (CPU, after a
+    short cpuDecision beat, isHome=false). It picks a SHORT pickPassTarget, disarms
+    throwInTaker/throwing BEFORE launching, then kickBallToward with a modest
+    lofted arc (T=clamp(0.45+d/M(60),0.4,1.0), vz=0.5·GRAVITY·T, hspeed=min(d/T,
+    900), spread 0.04) — a two-handed toss, much shorter range than a kick — and
+    `offsideFlags.clear()` (no offside from a throw-in, real rule). throwInTaker is
+    also cleared in resetKickoff and at the start of awardRestart.
 - BOTTOM TOUCHLINE VISIBILITY: `CAM_Y_MAX = FIELD_H * 0.82` (was 0.70). At 0.70
   the near (bottom) touchline projected ~706px, just off the 700px canvas even at
   max depth pan, so it was never visible; 0.82 brings it on-screen (~589-609px)

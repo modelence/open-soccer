@@ -826,8 +826,9 @@ function drawHumanoid(
 
   // Arms (counter-swing). Far arm behind torso, near arm in front.
   // A diving keeper reaches both arms out overhead toward the ball, like a
-  // celebration pose but rotated with the laid-out body.
-  const celebrating = (!!p.celebrating || diving) && !kicking;
+  // celebration pose but rotated with the laid-out body. A throw-in taker also
+  // raises both arms overhead, gripping the ball for a two-handed throw.
+  const celebrating = (!!p.celebrating || !!p.throwing || diving) && !kicking;
   const armSwing = kicking ? 6 : -swing * 5;
   const drawArm = (dir: number, swingAmt: number) => {
     ctx.strokeStyle = kit.sleeve;

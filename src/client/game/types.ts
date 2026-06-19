@@ -35,6 +35,8 @@ export interface PlayerEntity {
   diveDir?: number;
   /** Lockout so a keeper doesn't re-trigger a dive every frame. */
   diveCooldown?: number;
+  /** True while this player is holding the ball overhead for a throw-in. */
+  throwing?: boolean;
 }
 
 export interface HudState {

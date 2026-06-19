@@ -129,6 +129,10 @@ export class PitchKickGame {
    *  restart decisions: throw-in / goal kick / corner go to the right side. */
   private lastTouchTeam: Team | null = null;
 
+  /** The player taking a throw-in (holds the ball overhead in both hands and
+   *  releases it as a hand THROW, not a foot kick). Null when not a throw-in. */
+  private throwInTaker: PlayerEntity | null = null;
+
   private homeScore = 0;
   private awayScore = 0;
   /** Real seconds of play elapsed; drives the accelerated match clock. */
@@ -262,8 +266,10 @@ export class PitchKickGame {
       p.celebrating = false;
       p.diveTimer = 0;
       p.diveCooldown = 0;
+      p.throwing = false;
       p.facing = { x: p.team === 'home' ? 1 : -1, y: 0 };
     }
+    this.throwInTaker = null;
 
     // Put the kicking team's forward on the ball.
     const fwd =
@@ -862,6 +868,13 @@ export class PitchKickGame {
   private doHomeKick(code: string, charge: number, lofted = false) {
     const kicker = this.controlled;
 
+    // A throw-in is taken with the HANDS — any kick key releases a hand throw
+    // (not a foot kick / shot), aimed at the held direction's teammate.
+    if (kicker === this.throwInTaker) {
+      this.executeThrowIn(kicker, true);
+      return;
+    }
+
     if (code === 'KeyD') {
       this.shootAssisted(kicker, charge);
       return;
@@ -1075,6 +1088,51 @@ export class PitchKickGame {
 
     // Control follows your pass (FIFA-style). All other switching is Q-only.
     this.controlled = target;
+  }
+
+  /** Release a throw-in by HAND: a gentle two-handed lofted toss to a teammate
+   *  (limited range, no foot kick / shot). Clears the throw-in armed state. */
+  private executeThrowIn(thrower: PlayerEntity, isHome: boolean) {
+    const target = this.pickPassTarget(thrower, {
+      short: true,
+      long: false,
+      through: false,
+    });
+
+    let aim: Vec;
+    if (target) {
+      aim = {
+        x: clamp(target.x + target.vx * 0.2, 15, FIELD_W - 15),
+        y: clamp(target.y + target.vy * 0.2, 15, FIELD_H - 15),
+      };
+      this.passReceiver = target;
+      if (isHome) this.controlled = target;
+    } else {
+      // Nobody to aim at — toss it a few metres infield in the held direction.
+      const f = isHome
+        ? this.heldDir(thrower)
+        : { x: thrower.team === 'home' ? 1 : -1, y: 0 };
+      aim = {
+        x: clamp(thrower.x + f.x * M(8), 15, FIELD_W - 15),
+        y: clamp(thrower.y + f.y * M(8), 15, FIELD_H - 15),
+      };
+    }
+
+    // Disarm BEFORE the throw so dribble/possession stop treating the ball as
+    // held overhead and kickBallToward launches it as a normal airborne ball.
+    this.throwInTaker = null;
+    thrower.throwing = false;
+
+    const d = dist(this.ball, aim);
+    // A two-handed throw: a modest lofted arc, much shorter range than a kick.
+    const T = clamp(0.45 + d / M(60), 0.4, 1.0);
+    const vz = 0.5 * GRAVITY * T;
+    const hspeed = Math.min(d / T, 900);
+    this.kickBallToward(aim, hspeed, thrower, vz, 0.04);
+
+    // No offside can be given from a throw-in (real rule).
+    this.offsideFlags.clear();
+    this.cpuDecision = 0.5;
   }
 
   /** The direction the user is holding on the arrows, falling back to the
@@ -1874,6 +1932,15 @@ export class PitchKickGame {
   }
 
   private updateAwayCarrier(p: PlayerEntity, dt: number) {
+    // Taking a throw-in: stand and throw it back into play by hand (after a
+    // short beat so the hold reads on screen), to the most open teammate.
+    if (p === this.throwInTaker) {
+      this.steer(p, 0, 0, dt);
+      if (this.cpuDecision > 0) return;
+      this.executeThrowIn(p, false);
+      return;
+    }
+
     // The keeper doesn't dribble out — he CATCHES, holds the ball in his hands
     // for a beat (so the save + gather reads on screen), then clears upfield.
     if (p.isGK) {
@@ -2042,8 +2109,9 @@ export class PitchKickGame {
     const prev = this.owner;
 
     // A ball above chest height flies over everyone — nobody can trap it
-    // until it drops back down (FIFA: lofted balls sail past players).
-    if (this.ball.z > CONTROL_HEIGHT) {
+    // until it drops back down (FIFA: lofted balls sail past players). The
+    // throw-in taker is the exception: he holds the ball overhead in his hands.
+    if (this.ball.z > CONTROL_HEIGHT && this.owner !== this.throwInTaker) {
       this.owner = null;
       return;
     }
@@ -2193,6 +2261,20 @@ export class PitchKickGame {
   }
 
   private dribble(owner: PlayerEntity) {
+    // A throw-in taker holds the ball OVERHEAD in both hands (FIFA throw-in
+    // pose), ready to throw it back into play. Lifted well above the head so it
+    // reads as a two-handed throw, not a kick.
+    if (owner === this.throwInTaker) {
+      const handZ = M(2.1);
+      this.ball.x += (owner.x - this.ball.x) * 0.4;
+      this.ball.y += (owner.y - this.ball.y) * 0.4;
+      this.ball.z += (handZ - this.ball.z) * 0.3;
+      this.ball.vz = 0;
+      this.ball.vx = owner.vx;
+      this.ball.vy = owner.vy;
+      return;
+    }
+
     // A keeper SCOOPS the ball up into his HANDS, held at chest height just in
     // front of his body. The ball rises from the ground (a quick gather/pickup
     // animation) and is glued there — it never squirts out in front toward an
@@ -2463,10 +2545,9 @@ export class PitchKickGame {
       const outY = b.y < 0 ? 0 : FIELD_H;
       const toTeam: Team = last === 'home' ? 'away' : 'home';
       const spotX = clamp(b.x, M(3), FIELD_W - M(3));
-      const name = (
-        toTeam === 'home' ? this.homeTeam : this.awayTeam
-      ).name.toUpperCase();
-      this.awardRestart(toTeam, spotX, outY, `THROW-IN · ${name}`, false);
+      // No banner text for a throw-in — it's taken with the hands (see
+      // executeThrowIn) and doesn't need an on-screen announcement.
+      this.awardRestart(toTeam, spotX, outY, '', false, true);
       return;
     }
 
@@ -2508,6 +2589,7 @@ export class PitchKickGame {
     spotY: number,
     label: string,
     takerIsGK: boolean,
+    isThrowIn = false,
   ) {
     const players = team === 'home' ? this.homePlayers : this.awayPlayers;
     const atkDir = team === 'home' ? 1 : -1;
@@ -2522,6 +2604,7 @@ export class PitchKickGame {
       p.kickTimer = 0;
       p.diveTimer = 0;
       p.diveCooldown = 0;
+      p.throwing = false;
       p.facing = { x: p.team === 'home' ? 1 : -1, y: 0 };
     }
 
@@ -2532,13 +2615,18 @@ export class PitchKickGame {
     taker.vx = taker.vy = 0;
     taker.facing = { x: atkDir, y: 0 };
 
+    // A throw-in is taken with the HANDS: arm the taker so he holds the ball
+    // overhead and releases a hand throw (see dribble + executeThrowIn).
+    this.throwInTaker = isThrowIn ? taker : null;
+    taker.throwing = isThrowIn;
+
     this.owner = taker;
     this.controlled =
       team === 'home' ? taker : this.homePlayers[this.homeTeam.kickoffFwd];
 
     this.camX = clamp(spotX, CAM_MIN, CAM_MAX);
     this.camY = clamp(spotY, CAM_Y_MIN, CAM_Y_MAX);
-    this.setMessage(label, 1.6);
+    if (label) this.setMessage(label, 1.6);
     this.freeze = 0.9;
 
     // Clear transient ball/possession state so play restarts cleanly.
