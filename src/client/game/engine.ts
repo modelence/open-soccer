@@ -474,11 +474,17 @@ export class PitchKickGame {
       return;
     }
 
-    // Ball out of play: it sits dead just past the line for a beat so you can
-    // SEE it cross out, THEN the restart (throw-in / goal kick / corner) is set
-    // up. Camera keeps tracking the ball during the pause.
+    // Ball out of play: it keeps coasting past the line for a beat so you can
+    // SEE it go out (FIFA-style), THEN the restart (throw-in / goal kick /
+    // corner) is set up. Camera keeps tracking the ball during the pause.
     if (this.outOfPlay > 0) {
       this.outOfPlay -= dt;
+      // Coast the ball out of bounds with heavy drag so it slows quickly (as if
+      // into the netting / crowd) and clamp it to a small margin past the line
+      // so it never sails off-screen.
+      this.integrateBall(dt, 3.2);
+      this.ball.x = clamp(this.ball.x, -M(7), FIELD_W + M(7));
+      this.ball.y = clamp(this.ball.y, -M(7), FIELD_H + M(7));
       this.updateCamera(dt);
       this.justPressed = [];
       this.justReleased = [];
@@ -2578,6 +2584,20 @@ export class PitchKickGame {
   private updateBall(dt: number) {
     if (this.owner) return; // dribble handles it
 
+    this.integrateBall(dt);
+
+    // The ball leaving the field of play is no longer a wall to bounce off —
+    // it goes OUT and the correct restart (throw-in / goal kick / corner) is
+    // awarded. A ball crossing the goal line inside the mouth & under the bar
+    // is left alone for handleGoals to score.
+    this.checkOutOfPlay();
+  }
+
+  /** Advance the free ball one step: horizontal motion, gravity + ground bounce
+   *  and rolling/air drag. `dragMul` scales the friction — used > 1 while the
+   *  ball is coasting out of play so it decelerates quickly off the pitch
+   *  (into the netting / crowd) and stays in view instead of sailing off. */
+  private integrateBall(dt: number, dragMul = 1) {
     this.ball.x += this.ball.vx * dt;
     this.ball.y += this.ball.vy * dt;
 
@@ -2603,20 +2623,14 @@ export class PitchKickGame {
     // Horizontal friction: almost none while flying, full rolling drag on
     // the grass. A lofted ball carries; a grounded ball decays as before.
     const decay = airborne
-      ? Math.exp(-BALL_DECAY * 0.12 * dt)
-      : Math.exp(-BALL_DECAY * dt);
+      ? Math.exp(-BALL_DECAY * 0.12 * dragMul * dt)
+      : Math.exp(-BALL_DECAY * dragMul * dt);
     this.ball.vx *= decay;
     this.ball.vy *= decay;
     if (!airborne && Math.hypot(this.ball.vx, this.ball.vy) < 4) {
       this.ball.vx = 0;
       this.ball.vy = 0;
     }
-
-    // The ball leaving the field of play is no longer a wall to bounce off —
-    // it goes OUT and the correct restart (throw-in / goal kick / corner) is
-    // awarded. A ball crossing the goal line inside the mouth & under the bar
-    // is left alone for handleGoals to score.
-    this.checkOutOfPlay();
   }
 
   /** Detect the ball crossing a boundary line and award the right restart.
@@ -2666,9 +2680,10 @@ export class PitchKickGame {
     }
   }
 
-  /** Begin the out-of-play pause: settle the ball dead just past the line where
-   *  it exited (so you SEE it go out) and remember the restart to award once the
-   *  pause elapses. updateBall is skipped while `outOfPlay > 0`. */
+  /** Begin the out-of-play pause: let the ball carry on past the line where it
+   *  exited (so you SEE it go out, FIFA-style) and remember the restart to award
+   *  once the pause elapses. updateBall is skipped while `outOfPlay > 0`, but the
+   *  ball still coasts via updateOutOfPlay. */
   private queueRestart(
     team: Team,
     spotX: number,
@@ -2677,13 +2692,10 @@ export class PitchKickGame {
     takerIsGK: boolean,
     isThrowIn: boolean,
   ) {
-    // Park the ball a touch past the boundary at the actual exit point and
-    // stop it dead so it doesn't sail off-screen during the pause.
-    const b = this.ball;
-    b.x = clamp(b.x, -M(1.5), FIELD_W + M(1.5));
-    b.y = clamp(b.y, -M(1.5), FIELD_H + M(1.5));
-    b.z = 0;
-    b.vx = b.vy = b.vz = 0;
+    // Don't freeze the ball at the line — let it carry on past the boundary and
+    // roll/fly out (like real football / FIFA) while the out-of-play pause runs.
+    // It keeps its velocity; updateOutOfPlay coasts it with extra drag so it
+    // slows quickly (into the netting / crowd) and stays in view.
     this.owner = null;
     this.aerialReceiver = null;
     this.pendingRestart = { team, spotX, spotY, label, takerIsGK, isThrowIn };

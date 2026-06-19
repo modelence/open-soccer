@@ -806,14 +806,18 @@ game state yet (no Stores/queries for gameplay).
   - OUT-OF-PLAY PAUSE (added after "it instantly changes to goal kick, I can't
     see what's happening — keep showing it 1-2s before switching"): checkOutOfPlay
     no longer calls awardRestart directly; it calls `queueRestart(team, spotX,
-    spotY, label, takerIsGK, isThrowIn)` which parks the ball DEAD just past the
-    exit line (clamped ±M(1.5) past each edge, z/vel zeroed, owner=null), stashes
-    `pendingRestart`, and sets `outOfPlay = 1.2`. `update()` has an early branch:
-    while `outOfPlay > 0` it ONLY decrements the timer + runs updateCamera (sim is
-    frozen, ball sits where it went out so you SEE it cross the line); when it hits
-    0 it pops pendingRestart and calls awardRestart (which then freezes 0.9s more
-    with its banner). Total dead time ≈ 2.1s. `outOfPlay`/`pendingRestart` reset in
-    resetKickoff.
+    spotY, label, takerIsGK, isThrowIn)` which only clears owner/aerialReceiver,
+    stashes `pendingRestart`, and sets `outOfPlay = 1.2` — it does NOT freeze the
+    ball. `update()` has an early branch: while `outOfPlay > 0` it decrements the
+    timer, runs updateCamera, AND keeps coasting the ball via `integrateBall(dt,
+    3.2)` (3.2× drag) clamped to ±M(7) past each edge — so the ball CARRIES ON
+    past the line and rolls/flies out (FIFA-style) instead of stopping dead at the
+    border, decelerating quickly into the netting/crowd and staying in view. When
+    the timer hits 0 it pops pendingRestart and calls awardRestart (which snaps the
+    ball to the restart spot and freezes 0.9s more with its banner). Total dead
+    time ≈ 2.1s. `outOfPlay`/`pendingRestart` reset in resetKickoff. (Ball physics
+    integration was factored out of updateBall into `integrateBall(dt, dragMul=1)`
+    so the coast can reuse it with heavier drag.)
   - OPPONENT KEEP-DISTANCE (added after "opponents should keep some distance from
     the kicker/thrower, isn't there a minimum?"): `pushOpponentsFromSpot(keepTeam,
     spot, minDist)` shoves every NON-keeper player NOT on keepTeam radially out to
