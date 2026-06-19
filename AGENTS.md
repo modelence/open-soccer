@@ -59,7 +59,7 @@ game state yet (no Stores/queries for gameplay).
   tele cam. proj y = VIEW_ANCHOR_Y(400) + (baseDepthY(y)-baseDepthY(viewCamY))
   *ZOOM, where baseDepthY is the pre-zoom integral foreshortening. Camera now
   ALSO follows depth: engine `camY` follows ball.y + vy*0.18 (gentler,
-  k=1-exp(-1.8dt)) clamped CAM_Y_MIN=0.30·FIELD_H..CAM_Y_MAX=0.70·FIELD_H;
+  k=1-exp(-1.8dt)) clamped CAM_Y_MIN=0.30·FIELD_H..CAM_Y_MAX=0.82·FIELD_H;
   render syncs `viewCamY`. CAM_MIN/MAX pulled to 360 so the goalmouth stays
   framed at the tighter horizontal view. The ball sits ≈VIEW_ANCHOR_Y on
   screen. To zoom more/less change ZOOM (and re-check goal framing/anchor).
@@ -775,6 +775,33 @@ game state yet (no Stores/queries for gameplay).
     900), spread 0.04) — a two-handed toss, much shorter range than a kick — and
     `offsideFlags.clear()` (no offside from a throw-in, real rule). throwInTaker is
     also cleared in resetKickoff and at the start of awardRestart.
+  - OUT-OF-PLAY PAUSE (added after "it instantly changes to goal kick, I can't
+    see what's happening — keep showing it 1-2s before switching"): checkOutOfPlay
+    no longer calls awardRestart directly; it calls `queueRestart(team, spotX,
+    spotY, label, takerIsGK, isThrowIn)` which parks the ball DEAD just past the
+    exit line (clamped ±M(1.5) past each edge, z/vel zeroed, owner=null), stashes
+    `pendingRestart`, and sets `outOfPlay = 1.2`. `update()` has an early branch:
+    while `outOfPlay > 0` it ONLY decrements the timer + runs updateCamera (sim is
+    frozen, ball sits where it went out so you SEE it cross the line); when it hits
+    0 it pops pendingRestart and calls awardRestart (which then freezes 0.9s more
+    with its banner). Total dead time ≈ 2.1s. `outOfPlay`/`pendingRestart` reset in
+    resetKickoff.
+  - OPPONENT KEEP-DISTANCE (added after "opponents should keep some distance from
+    the kicker/thrower, isn't there a minimum?"): `pushOpponentsFromSpot(keepTeam,
+    spot, minDist)` shoves every NON-keeper player NOT on keepTeam radially out to
+    minDist from the spot (clampToField after). awardRestart calls it with keepOut =
+    throw-in M(4), goal kick M(11), other (corner) M(9.15); callOffside calls it
+    with M(9.15) (regulation free-kick distance). Keepers and the taking team are
+    exempt.
+  - KEEPER LONG CLEARANCE (added after "GK keeps passing to very close after goal
+    kick / catch instead of kicking farther, creating risky situations"): shared
+    `keeperDistribute(gk)` replaces both keepers' inline target pick. Scores each
+    outfield mate by `forward*0.6 + min(open,220)` with heavy penalties for being
+    close (d<M(20): -1500) or marked (open<M(6): -700), so it favours an open mate
+    well UPFIELD. If chosen mate is >M(22) away it launches a lofted ballistic arc
+    (T=clamp(0.6+d/M(70),0.6,1.5), hspeed=min(d/T*1.12,1600)), else a grounded
+    pass. homeKeeperDistribute (0.7s hold) and the away-GK branch in
+    updateAwayCarrier (1.1s hold + cpuDecision gate) both delegate to it.
 - BOTTOM TOUCHLINE VISIBILITY: `CAM_Y_MAX = FIELD_H * 0.82` (was 0.70). At 0.70
   the near (bottom) touchline projected ~706px, just off the 700px canvas even at
   max depth pan, so it was never visible; 0.82 brings it on-screen (~589-609px)

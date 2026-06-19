@@ -140,6 +140,20 @@ export class PitchKickGame {
   private message = '';
   private messageTimer = 0;
   private freeze = 0;
+  /** Out-of-play pause: when the ball crosses a line, it sits dead at the exit
+   *  point for a beat (so you SEE it go out) before the restart is set up. */
+  private outOfPlay = 0;
+  /** The restart to award when the out-of-play pause ends. */
+  private pendingRestart:
+    | {
+        team: Team;
+        spotX: number;
+        spotY: number;
+        label: string;
+        takerIsGK: boolean;
+        isThrowIn: boolean;
+      }
+    | null = null;
   /** Goal celebration: holds play while the ball sits in the net and the
    *  scoring side celebrates, before the restart. */
   private celebration = 0;
@@ -270,6 +284,8 @@ export class PitchKickGame {
       p.facing = { x: p.team === 'home' ? 1 : -1, y: 0 };
     }
     this.throwInTaker = null;
+    this.outOfPlay = 0;
+    this.pendingRestart = null;
 
     // Put the kicking team's forward on the ball.
     const fwd =
@@ -447,6 +463,22 @@ export class PitchKickGame {
       this.justReleased = [];
       if (this.celebration <= 0 && this.pendingKickoff) {
         this.resetKickoff(this.pendingKickoff);
+      }
+      return;
+    }
+
+    // Ball out of play: it sits dead just past the line for a beat so you can
+    // SEE it cross out, THEN the restart (throw-in / goal kick / corner) is set
+    // up. Camera keeps tracking the ball during the pause.
+    if (this.outOfPlay > 0) {
+      this.outOfPlay -= dt;
+      this.updateCamera(dt);
+      this.justPressed = [];
+      this.justReleased = [];
+      if (this.outOfPlay <= 0 && this.pendingRestart) {
+        const r = this.pendingRestart;
+        this.pendingRestart = null;
+        this.awardRestart(r.team, r.spotX, r.spotY, r.label, r.takerIsGK, r.isThrowIn);
       }
       return;
     }
@@ -1411,6 +1443,9 @@ export class PitchKickGame {
     taker.vx = taker.vy = 0;
     taker.facing = { x: defAtk, y: 0 };
 
+    // Attackers must retreat the regulation free-kick distance (9.15 m).
+    this.pushOpponentsFromSpot(defTeam, { x: spotX, y: spotY }, M(9.15));
+
     this.owner = taker;
     this.controlled =
       defTeam === 'home' ? taker : this.homePlayers[this.homeTeam.kickoffFwd];
@@ -1882,20 +1917,54 @@ export class PitchKickGame {
     this.gkHoldTimer += dt;
     if (this.gkHoldTimer < 0.7) return; // brief hold before clearing
     this.gkHoldTimer = 0;
+    this.keeperDistribute(gk);
+  }
+
+  /** A keeper clears the ball UPFIELD (not square to a defender at his feet):
+   *  pick the most-advanced reasonably-open teammate and hoof it to them with a
+   *  real lofted goal-kick arc when the target is far. Shared by both keepers.
+   *  Fixes the keeper rolling it 5 m to a marked centre-back in his own box. */
+  private keeperDistribute(gk: PlayerEntity) {
+    const atk = gk.team === 'home' ? 1 : -1;
+    const ownGoalX = gk.team === 'home' ? 0 : FIELD_W;
+    const mates = gk.team === 'home' ? this.homePlayers : this.awayPlayers;
+
     let best: PlayerEntity | null = null;
     let bestScore = -Infinity;
-    for (const m of this.homePlayers) {
+    for (const m of mates) {
       if (m === gk || m.isGK) continue;
+      const d = dist(gk, m);
+      const forward = (m.x - ownGoalX) * atk; // how far up the pitch (px)
+      const open = this.nearestOpponentDist(m);
+      // Reward distance up the pitch most (kick it long), then open space.
+      // Heavily penalize a teammate right next to the keeper (don't roll it
+      // square in the box) or one who is tightly marked.
       const score =
-        this.nearestOpponentDist(m) - Math.abs(m.x - FIELD_W * 0.45) * 0.1;
+        forward * 0.6 +
+        Math.min(open, 220) +
+        (d < M(20) ? -1500 : 0) +
+        (open < M(6) ? -700 : 0);
       if (score > bestScore) {
         bestScore = score;
         best = m;
       }
     }
-    if (best) {
-      const d = dist(this.ball, best);
-      this.kickBallToward(best, this.passPower(d, 300, 1300), gk);
+    if (!best) return;
+
+    const aim = {
+      x: clamp(best.x + best.vx * 0.2, 20, FIELD_W - 20),
+      y: clamp(best.y + best.vy * 0.2, 20, FIELD_H - 20),
+    };
+    const d = dist(this.ball, aim);
+    if (d > M(22)) {
+      // A proper lofted goal kick / clearance — flies over midfield and drops
+      // on the target, instead of a grounded pass that dies short.
+      const T = clamp(0.6 + d / M(70), 0.6, 1.5);
+      const vz = 0.5 * GRAVITY * T;
+      const hspeed = Math.min((d / T) * 1.12, 1600);
+      this.kickBallToward(aim, hspeed, gk, vz, 0.06);
+    } else {
+      this.kickBallToward(aim, this.passPower(d, 300, 1300), gk);
     }
   }
 
@@ -1953,20 +2022,7 @@ export class PitchKickGame {
       if (this.cpuDecision > 0) return;
       this.gkHoldTimer = 0;
       this.cpuDecision = 0.5;
-      let best: PlayerEntity | null = null;
-      let bestScore = -Infinity;
-      for (const m of this.awayPlayers) {
-        if (m === p || m.isGK) continue;
-        const score = this.nearestOpponentDist(m) - Math.abs(m.x - FIELD_W * 0.5) * 0.1;
-        if (score > bestScore) {
-          bestScore = score;
-          best = m;
-        }
-      }
-      if (best) {
-        const d = dist(this.ball, best);
-        this.kickBallToward(best, this.passPower(d, 300, 1300), p);
-      }
+      this.keeperDistribute(p);
       return;
     }
 
@@ -2547,7 +2603,7 @@ export class PitchKickGame {
       const spotX = clamp(b.x, M(3), FIELD_W - M(3));
       // No banner text for a throw-in — it's taken with the hands (see
       // executeThrowIn) and doesn't need an on-screen announcement.
-      this.awardRestart(toTeam, spotX, outY, '', false, true);
+      this.queueRestart(toTeam, spotX, outY, '', false, true);
       return;
     }
 
@@ -2567,16 +2623,39 @@ export class PitchKickGame {
         const dir = leftLine ? 1 : -1;
         const spotX = goalX + dir * M(5.5); // edge of the 6-yard box
         const spotY = clamp(b.y, FIELD_H / 2 - M(6), FIELD_H / 2 + M(6));
-        this.awardRestart(defendingTeam, spotX, spotY, 'GOAL KICK', true);
+        this.queueRestart(defendingTeam, spotX, spotY, 'GOAL KICK', true, false);
       } else {
         // Defender put it out (or unknown) → corner to the attacking side.
         const cornerY = b.y < FIELD_H / 2 ? M(1) : FIELD_H - M(1);
         const name = (
           attackingTeam === 'home' ? this.homeTeam : this.awayTeam
         ).name.toUpperCase();
-        this.awardRestart(attackingTeam, goalX, cornerY, `CORNER · ${name}`, false);
+        this.queueRestart(attackingTeam, goalX, cornerY, `CORNER · ${name}`, false, false);
       }
     }
+  }
+
+  /** Begin the out-of-play pause: settle the ball dead just past the line where
+   *  it exited (so you SEE it go out) and remember the restart to award once the
+   *  pause elapses. updateBall is skipped while `outOfPlay > 0`. */
+  private queueRestart(
+    team: Team,
+    spotX: number,
+    spotY: number,
+    label: string,
+    takerIsGK: boolean,
+    isThrowIn: boolean,
+  ) {
+    // Park the ball a touch past the boundary at the actual exit point and
+    // stop it dead so it doesn't sail off-screen during the pause.
+    const b = this.ball;
+    b.x = clamp(b.x, -M(1.5), FIELD_W + M(1.5));
+    b.y = clamp(b.y, -M(1.5), FIELD_H + M(1.5));
+    b.z = 0;
+    b.vx = b.vy = b.vz = 0;
+    this.owner = null;
+    this.pendingRestart = { team, spotX, spotY, label, takerIsGK, isThrowIn };
+    this.outOfPlay = 1.2;
   }
 
   /** Stop play, place the ball at the restart spot, hand it to the nearest
@@ -2620,6 +2699,12 @@ export class PitchKickGame {
     this.throwInTaker = isThrowIn ? taker : null;
     taker.throwing = isThrowIn;
 
+    // Opponents must retreat the regulation distance from the restart (FIFA:
+    // 2 m for a throw-in, 9.15 m for a corner, and well clear of the box for a
+    // goal kick). Push any encroaching opponent radially off the spot.
+    const keepOut = isThrowIn ? M(4) : takerIsGK ? M(11) : M(9.15);
+    this.pushOpponentsFromSpot(team, { x: spotX, y: spotY }, keepOut);
+
     this.owner = taker;
     this.controlled =
       team === 'home' ? taker : this.homePlayers[this.homeTeam.kickoffFwd];
@@ -2649,6 +2734,28 @@ export class PitchKickGame {
     this.bufferTimer = 0;
     this.kickPending = false;
     this.passReceiver = null;
+  }
+
+  /** Push every player NOT on `keepTeam` to at least `minDist` from `spot`, so
+   *  opponents respect the regulation retreat at a restart (throw-in / corner /
+   *  goal kick / free kick). The taking team and keepers are left in place. */
+  private pushOpponentsFromSpot(keepTeam: Team, spot: Vec, minDist: number) {
+    for (const p of [...this.homePlayers, ...this.awayPlayers]) {
+      if (p.team === keepTeam || p.isGK) continue;
+      let dx = p.x - spot.x;
+      let dy = p.y - spot.y;
+      let d = Math.hypot(dx, dy);
+      if (d >= minDist) continue;
+      if (d < 0.001) {
+        // Standing right on the spot — shove toward their own goal.
+        dx = p.team === 'home' ? -1 : 1;
+        dy = 0;
+        d = 1;
+      }
+      p.x = spot.x + (dx / d) * minDist;
+      p.y = spot.y + (dy / d) * minDist;
+      this.clampToField(p);
+    }
   }
 
   private handleGoals() {
