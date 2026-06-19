@@ -1770,6 +1770,48 @@ export class PitchKickGame {
   }
 
   /**
+   * FIFA "second man" containment spot. While the first defender (chaser)
+   * presses the ball, a covering defender jockeys into the gap between the
+   * carrier and the defended goal — holding the carrier up and cutting the
+   * forward lane so he can't just drive through the press; he's forced to
+   * pass, turn back, or run into a second challenge. Spot is ~`gap`px
+   * goal-side of the carrier on the carrier→goal line.
+   */
+  private containTarget(d: PlayerEntity, carrier: PlayerEntity, gap = 90): Vec {
+    const goal = { x: d.team === 'home' ? 0 : FIELD_W, y: FIELD_H / 2 };
+    const gx = goal.x - carrier.x;
+    const gy = goal.y - carrier.y;
+    const gl = len(gx, gy) || 1;
+    return this.clampTarget({
+      x: carrier.x + (gx / gl) * gap,
+      y: carrier.y + (gy / gl) * gap,
+    });
+  }
+
+  /**
+   * Pick the SECOND defender (the container) for a team defending against
+   * `carrier`: the nearest outfielder — other than the first presser — that is
+   * goal-side of the carrier (between him and the defended goal), so it steps
+   * out to contain rather than dragging someone up from behind the ball.
+   * Falls back to the nearest remaining outfielder when none is goal-side.
+   */
+  private pickContainer(
+    defenders: PlayerEntity[],
+    carrier: PlayerEntity,
+    presser: PlayerEntity | null,
+  ): PlayerEntity | null {
+    const goalX = defenders[0]?.team === 'home' ? 0 : FIELD_W;
+    /** How far each player is up the pitch from the defended goal. */
+    const depthToGoal = (x: number) => Math.abs(x - goalX);
+    const carrierDepth = depthToGoal(carrier.x);
+    const pool = defenders.filter(
+      (p) => !p.isGK && p !== presser && p !== this.controlled,
+    );
+    const goalSide = pool.filter((p) => depthToGoal(p.x) <= carrierDepth + 30);
+    return this.nearestTo(goalSide.length ? goalSide : pool, carrier);
+  }
+
+  /**
    * Hand out attacking off-ball roles to the team in possession so the carrier
    * always has a MIX of options (FIFA "player support"), instead of every
    * teammate making the same run at goal. Greedy + position-based so it's
@@ -1971,6 +2013,13 @@ export class PitchKickGame {
       presser = this.nearestTo(candidates, this.ball);
     }
 
+    // Second-man containment: a covering defender steps out to jockey
+    // goal-side of the carrier (FIFA-style) so the user is squeezed into
+    // passing instead of dribbling unopposed past a backpedalling block.
+    const container = awayCarrier
+      ? this.pickContainer(this.homePlayers, awayCarrier, presser)
+      : null;
+
     for (const p of this.homePlayers) {
       if (p === this.controlled) continue;
       if (this.owner === p) {
@@ -1999,6 +2048,13 @@ export class PitchKickGame {
           });
           this.moveToward(p, t, PRESS_SPEED, dt);
         }
+        continue;
+      }
+      if (p === container && awayCarrier) {
+        // Jockey into a goal-side contain spot (moveToward slow-in lets him
+        // settle and hold the line rather than diving in — that's the presser's
+        // job). Forces the carrier wide or into a pass.
+        this.moveToward(p, this.containTarget(p, awayCarrier), PRESS_SPEED, dt);
         continue;
       }
       const plan = this.offBallPlan(p, TEAMMATE_SPEED);
@@ -2103,6 +2159,14 @@ export class PitchKickGame {
         ? this.owner
         : null;
 
+    // FIFA second-man defending: while `chaser` presses the ball, a `container`
+    // steps out to jockey goal-side of the carrier — cutting his forward lane
+    // so he can't just run, forcing a pass/turn. Only when the user is on the
+    // ball (when the CPU has it, the chaser IS the carrier).
+    const container = userCarrier
+      ? this.pickContainer(outfield, userCarrier, chaser)
+      : null;
+
     for (const p of this.awayPlayers) {
       if (p === carrier) {
         this.updateAwayCarrier(p, dt);
@@ -2120,6 +2184,10 @@ export class PitchKickGame {
           };
           this.moveToward(p, t, AWAY_CHASE_SPEED, dt);
         }
+      } else if (p === container && userCarrier) {
+        // Jockey into the containing spot (moveToward eases in so he holds the
+        // line rather than barging through — the chaser is the committed one).
+        this.moveToward(p, this.containTarget(p, userCarrier), PRESS_SPEED, dt);
       } else {
         const plan = this.offBallPlan(p, AWAY_FORMATION_SPEED);
         const sp =

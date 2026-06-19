@@ -879,6 +879,29 @@ game state yet (no Stores/queries for gameplay).
     ≈35 km/h, just over an average dribbler) so a free defender runs the
     carrier down and into a jostle. A genuine PAC 95+ speed-merchant can still
     occasionally pull away — realistic given the ratings.
+  - TACKLE-FIX v4.4 SECOND-MAN CONTAINMENT (user: "I want defenders to be MORE
+    AGGRESSIVE. When I run forward all the defenders in front just keep
+    backpedalling toward their goal — no one pressures me or tries to CONTAIN me
+    to force a pass, I just keep running"): the defensive AI previously had only
+    ONE engager (away `chaser` / home `presser`) drive the ball; everyone else
+    held zonal lines that retreat as the carrier advances, so the user could jog
+    through unopposed. Modeled FIFA's first-defender(press)+second-defender
+    (contain) pairing. Two new helpers:
+    - `containTarget(d, carrier, gap=90)`: returns a clamped spot `gap`px GOAL-
+      SIDE of the carrier on the carrier→defended-goal line (goal x=0 for home,
+      FIELD_W for away). The jockey position the second defender holds.
+    - `pickContainer(defenders, carrier, presser)`: picks the nearest outfielder
+      — excluding the presser and the user's `controlled` — that is goal-side of
+      the carrier (depthToGoal(p) <= carrierDepth+30), falling back to nearest
+      remaining outfielder if none is goal-side. This is the "second man".
+    Both `updateAwayTeam` and `updateHomeTeammates` compute a `container` when a
+    user/away carrier exists and add a branch: the container `moveToward`s its
+    `containTarget` at PRESS_SPEED. Uses `moveToward` (slow-in) NOT `driveToward`
+    so the second man SETTLES into the contain line and jockeys rather than
+    diving in — committing the tackle is still the presser's job. Net effect: as
+    the user carries forward, the nearest covering defender steps UP to sit
+    ~90px goal-side and shepherd him wide / force the pass, instead of the whole
+    block just retreating.
   - FIFA reference: tackles are manual buttons; contain auto-pokes; physical
     seal-outs from running into the dribbler are automatic; C = contain on
     PC keyboard.
