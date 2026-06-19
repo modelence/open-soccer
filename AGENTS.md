@@ -623,15 +623,27 @@ game state yet (no Stores/queries for gameplay).
     direction instantly). New `DRIBBLE_ACCEL=4.6` — carrier turns/accelerates
     even heavier; passed as the `accel` arg in updateControlled's steer call
     when `owns`.
-  - DRIBBLE PENALTY: new `DRIBBLE_MULT=0.83` multiplies the human carrier's
-    speed in updateControlled (`if (owns) speed *= DRIBBLE_MULT`) so you can't
-    just sprint past everyone with the ball. Effective dribble-sprint ≈
-    228×0.83 ≈ 189 < free sprint 228 < chasing defender AWAY_CHASE 220.
-  - SPEEDS compressed + defenders made to sprint: WALK 165→150, SPRINT 255→228,
-    TEAMMATE 155→150, AWAY_CHASE 180→220, AWAY_CARRY 165→192, AWAY_FORMATION
-    140→138, RUN 200→205, PRESS 200→220, JOCKEY 180→172, TACKLE_LUNGE 310→300.
-    Net effect: top speed lower (less ping-pong) but chasing/pressing defenders
-    actually keep up with / catch a dribbler.
+  - DRIBBLE PENALTY: `DRIBBLE_MULT` multiplies the carrier's speed in
+    updateControlled (`if (owns) speed *= dribbleKeepMul(p.ratings, DRIBBLE_MULT)`)
+    so you can't just sprint past everyone with the ball. See REAL-LIFE SPEED
+    RE-ANCHOR below for the current value.
+  - SPEEDS compressed + defenders made to sprint (v3): WALK 165→150, SPRINT
+    255→228, AWAY_CHASE 180→220, RUN 200→205, PRESS 200→220, etc. — chasing
+    defenders now keep up with a dribbler. SUPERSEDED by the real-life re-anchor:
+  - REAL-LIFE SPEED RE-ANCHOR (added after user asked "is our speed with/without
+    ball matching real life?"). Converting via PX_PER_M=20.95, the v3 free sprint
+    of 228 px/s was 39 km/h (too fast — real pro max is 32-34, elite 36-38) and a
+    PAC-97 player hit 44 km/h (impossible). The with-ball sprint (189 px/s ≈ 32.5
+    km/h) was actually realistic — it just FELT slow because everything else blew
+    past. Fix: anchored every locomotion constant to real km/h. New values:
+    SPRINT 228→198 (34 km/h baseline), WALK 150→128 (22), TEAMMATE 150→128,
+    AWAY_CHASE 220→191, AWAY_CARRY 192→176, AWAY_FORMATION 138→120, RUN 205→178,
+    PRESS 220→191, JOCKEY 172→150, TACKLE_LUNGE 300→260, DRIBBLE_MULT 0.83→0.90
+    (real high-speed dribble keeps ~90% of sprint ≈ 30.6 km/h). Also lowered the
+    `paceMul` spread in ratings.ts 0.6→0.5 so PAC 99 tops at ~38 km/h (Mbappé
+    record) and PAC 40 ~28 km/h, instead of 44. All relative balance preserved
+    (defender chase still ≈ sprint so footraces stay fair); the whole game is
+    ~13% slower in absolute terms but the dribble no longer feels left behind.
   - MARKING loosened so passing has outlets: `computeMarking` caps markers at
     `maxMarks = max(1, threats.length - 2)` (always ≥2 attackers left free),
     engage range 320→250, `markTarget` standoff 40→52, and the off-ball

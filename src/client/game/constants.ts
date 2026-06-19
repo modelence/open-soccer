@@ -52,25 +52,32 @@ export const CONTROL_HEIGHT = M(1.25);
 // The key relationship: a player CARRYING the ball (DRIBBLE_MULT) is slower
 // than a free runner, and a defender chasing/pressing runs at near-sprint — so
 // you can't just knock it past everyone and outrun the whole pitch to goal.
-export const WALK_SPEED = 150;
-export const SPRINT_SPEED = 228;
-export const TEAMMATE_SPEED = 150;
+// REAL-LIFE-ANCHORED (all converted via PX_PER_M=20.95; baseline = PAC/DRI 75,
+// then the PAC rating in ratings.ts scales the sprint/run further per player):
+//   WALK 128 ≈ 22 km/h jog · SPRINT 198 ≈ 34 km/h (avg pro max) · with-ball
+//   sprint 198×0.90 ≈ 30.6 km/h · a PAC-99 flyer reaches ~38 km/h (Mbappé), a
+//   PAC-40 plodder ~28 km/h. Was 228 (39 km/h) — unrealistically fast, which is
+//   why a (realistic) dribble felt slow next to it.
+export const WALK_SPEED = 128;
+export const SPRINT_SPEED = 198;
+export const TEAMMATE_SPEED = 128;
 /** A chasing defender genuinely sprints after the ball (was a slow jog). */
-export const AWAY_CHASE_SPEED = 220;
+export const AWAY_CHASE_SPEED = 191;
 /** The CPU carrier dribbles at the (penalised) carrying pace. */
-export const AWAY_CARRY_SPEED = 192;
-export const AWAY_FORMATION_SPEED = 138;
+export const AWAY_CARRY_SPEED = 176;
+export const AWAY_FORMATION_SPEED = 120;
 /** Off-ball forward runs in behind (both teams). */
-export const RUN_SPEED = 205;
+export const RUN_SPEED = 178;
 /** Closing down the carrier / tracking a marked attacker — a real sprint. */
-export const PRESS_SPEED = 220;
+export const PRESS_SPEED = 191;
 /** Contain (hold C): jockey speed while shadowing the carrier. */
-export const JOCKEY_SPEED = 172;
+export const JOCKEY_SPEED = 150;
 /** Burst speed of the standing-tackle lunge (D without the ball). */
-export const TACKLE_LUNGE_SPEED = 300;
+export const TACKLE_LUNGE_SPEED = 260;
 /** Carrying the ball is slower than running freely — a real dribble penalty.
- *  Applied to the carrier's top speed so a free defender can run you down. */
-export const DRIBBLE_MULT = 0.83;
+ *  Applied to the carrier's top speed so a free defender can run you down.
+ *  0.90 ≈ a real high-speed dribble keeps ~90% of free-sprint pace. */
+export const DRIBBLE_MULT = 0.90;
 export const CONTROL_DIST = PLAYER_R + BALL_R + 16; // ball "at feet" reach ≈ 1.4 m
 /** Ball rolling friction (exponential decay per second). A kick at power v
  *  rolls v/BALL_DECAY px total — pass powers MUST account for this. */

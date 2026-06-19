@@ -18,10 +18,11 @@ function attrMul(rating: number, spread: number): number {
 }
 
 // ── PACE → movement speed ────────────────────────────────────────────────
-// Scales every player's top/target speed. 90 vs 60 ≈ 18% faster — enough to
-// win a footrace but not turn defenders into spectators.
+// Scales every player's top/target speed, anchored to real km/h: at SPRINT_SPEED
+// (34 km/h baseline), PAC 99 → ~38 km/h (Mbappé record), PAC 40 → ~28 km/h
+// (slow CB). spread 0.5 keeps the footrace gap clear but humanly possible.
 export function paceMul(r: Ratings): number {
-  return attrMul(r.pac, 0.6);
+  return attrMul(r.pac, 0.5);
 }
 // Pace also lends a little extra acceleration/agility (snappier off the mark).
 export function paceAccelMul(r: Ratings): number {
