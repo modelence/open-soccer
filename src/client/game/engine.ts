@@ -2331,9 +2331,26 @@ export class PitchKickGame {
       this.jostle = Math.max(0, this.jostle - dt * 2.5);
       return;
     }
-    // PHYSICALITY decides the duel: a stronger challenger muscles the carrier
-    // off the ball sooner, while a stronger carrier shields it for longer.
-    this.jostle += dt * duelRate(challenger.ratings, o.ratings);
+    // POSITION decides HOW FAST the duel goes. A defender dead behind the
+    // carrier (ball shielded on the far side) can only nibble — he has to work
+    // around toward the ball to actually win it. One alongside or goal-side
+    // challenges effectively. alignment = (ball-carrier)·(tackler-carrier),
+    // normalised: +1 = on the ball side (in front), 0 = directly alongside,
+    // -1 = dead behind the carrier's back.
+    const bsx = this.ball.x - o.x;
+    const bsy = this.ball.y - o.y;
+    const tsx = challenger.x - o.x;
+    const tsy = challenger.y - o.y;
+    const bl = len(bsx, bsy) || 1;
+    const tl = len(tsx, tsy) || 1;
+    const alignment = (bsx * tsx + bsy * tsy) / (bl * tl);
+    // Map to an accrual factor: dead behind ≈0.22 (so a pure back-shield takes
+    // ~2s of sustained tight contact — "eventually, if he stays glued", not
+    // right away), alongside ≈0.6 (~0.8s), ball-side 1.0 (~0.5s).
+    const posFactor = 0.22 + ((alignment + 1) / 2) * 0.78;
+    // PHYSICALITY also weights the duel: a stronger challenger muscles the
+    // carrier off sooner, a stronger carrier shields longer.
+    this.jostle += dt * duelRate(challenger.ratings, o.ratings) * posFactor;
     if (this.jostle < 0.5) return;
     // Contact sustained long enough — the challenger muscles the ball away.
     // Pass requireBallSide=false: a body-contact battle wins from ANY side

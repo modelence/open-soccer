@@ -857,6 +857,19 @@ game state yet (no Stores/queries for gameplay).
     r+r-4 (≈18px) and `driveToward` keeps barging the chaser in, so the gap
     closes to touching well inside the 0.5s window — the ball now pops with the
     defender visibly on the carrier's back, not hanging off it.
+  - TACKLE-FIX v4.3 POSITION-WEIGHTED DUEL (user: "tackling from behind is too
+    easy now — they should get to my SIDE to actually win it, eventually if
+    faster but not right away"): jostle accrual is no longer a flat rate. It's
+    scaled by `posFactor` from the challenger's position vs the ball:
+    `alignment = norm(ball-carrier)·norm(tackler-carrier)` (+1 ball-side/front,
+    0 alongside, -1 dead behind — the ball sits ~17px in front of the carrier
+    in their facing dir, so a chaser behind reads ≈-1). `posFactor = 0.22 +
+    ((alignment+1)/2)*0.78` → dead behind ≈0.22 (×duelRate, so a pure back-
+    shield needs ~2s of sustained tight contact to win — "eventually if he
+    stays glued", not instantly), alongside ≈0.6 (~0.8s), ball-side 1.0
+    (~0.5s). So a faster defender still wins from behind eventually, but the
+    quick steal requires working around to the side/front. Combines with
+    PHYSICALITY (duelRate).
   - TACKLE-FIX v4 CHASE-INTO-CONTACT: `moveToward` decelerates within 36px of
     its target, so chasers used to hover ~6px behind the carrier and never make
     body contact (no jostle, no steal). New `driveToward(p, t, speed, dt)` is a
