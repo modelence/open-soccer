@@ -831,59 +831,57 @@ export class PitchKickGame {
       // override toward the meeting point so they don't miss it. With no arrow
       // held, the receiver fully takes over and collects the ball.
       if (incoming && p === this.passReceiver) {
-        // The velocity the user's input WOULD give the player this frame.
-        const ivx = ix * speed;
-        const ivy = iy * speed;
-        // Simulate the next ~1.3s to find the closest the player's CURRENT run
-        // gets to the ball — accounting for the ball's exponential friction so
-        // a runaway player who the (slowing) ball can never catch is correctly
-        // flagged as "going to miss". Airborne passes decay far slower.
+        // FIFA auto-receive: instead of asking "will the user's current run
+        // happen to intercept the ball?" (which oscillates — the moment we
+        // nudge toward the ball the run looks fine again, so the receiver
+        // parks short and never collects it), we solve for the EARLIEST point
+        // on the ball's path the receiver can actually run onto, then commit
+        // to it. The user's input only biases the APPROACH ANGLE — it can
+        // never steer the receiver away from a ball they'd otherwise miss.
         const airborne = this.ball.z > 0.01 || this.ball.vz > 0.01;
         const k = airborne ? BALL_DECAY * 0.12 : BALL_DECAY;
         let bx = this.ball.x;
         let by = this.ball.y;
         let bvx = this.ball.vx;
         let bvy = this.ball.vy;
-        let px = p.x;
-        let py = p.y;
         const stepT = 0.05;
         const decayStep = Math.exp(-k * stepT);
         // Displacement over one step for the current velocity (∫v dt).
         const dispK = k > 1e-3 ? (1 - decayStep) / k : stepT;
-        let minGap = Infinity;
+        // Pace we will actually run to meet it at.
+        const runSpeed = sprint ? SPRINT_SPEED : RUN_SPEED;
+        // March the ball forward; the first point the receiver can reach in
+        // time (running straight at it) is the interception. If they can never
+        // catch it within the window, chase where it ends up (last sim point) —
+        // covers a pass that stops SHORT, so the receiver always goes to get it.
         let meetX = bx;
         let meetY = by;
-        for (let t = 0; t <= 1.3; t += stepT) {
-          const g = len(bx - px, by - py);
-          if (g < minGap) {
-            minGap = g;
-            meetX = bx;
-            meetY = by;
-          }
+        for (let t = 0; t <= 2.5; t += stepT) {
+          meetX = bx;
+          meetY = by;
+          const gap = len(bx - p.x, by - p.y);
+          const tReach = Math.max(0, gap - CONTROL_DIST) / runSpeed;
+          if (tReach <= t) break; // we can be here as the ball arrives
           bx += bvx * dispK;
           by += bvy * dispK;
           bvx *= decayStep;
           bvy *= decayStep;
-          px += ivx * stepT;
-          py += ivy * stepT;
         }
 
-        // 0 while the current run clearly intercepts (gap within reach), 1 once
-        // it would clearly miss (gap a stride or more outside reach).
-        const reach = CONTROL_DIST + 6;
-        const gravity = hasInput ? clamp((minGap - reach) / 45, 0, 1) : 1;
-
-        if (gravity > 0) {
-          const ax = meetX - p.x;
-          const ay = meetY - p.y;
-          const al = len(ax, ay);
-          const ux = al > 1 ? ax / al : 0;
-          const uy = al > 1 ? ay / al : 0;
-          hx = ix * (1 - gravity) + ux * gravity;
-          hy = iy * (1 - gravity) + uy * gravity;
-          // Make sure they can actually get there: chase at a real running
-          // pace when meaningfully pulled off their input.
-          if (!sprint && gravity > 0.25) speed = RUN_SPEED;
+        const ax = meetX - p.x;
+        const ay = meetY - p.y;
+        const al = len(ax, ay);
+        // Once the ball is essentially at our feet, hand full control back to
+        // the user; until then, drive to the meeting point.
+        if (al > CONTROL_DIST) {
+          const ux = ax / al;
+          const uy = ay / al;
+          // A little user steer (to choose which side to take it on) but the
+          // run to the ball dominates so the receiver never drifts off it.
+          const inputW = hasInput ? 0.3 : 0;
+          hx = ux * (1 - inputW) + ix * inputW;
+          hy = uy * (1 - inputW) + iy * inputW;
+          if (!sprint) speed = RUN_SPEED;
         }
       }
 

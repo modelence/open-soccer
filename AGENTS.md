@@ -274,25 +274,34 @@ game state yet (no Stores/queries for gameplay).
   (old ~380 through band caused the skip). Through passes exclude the GK.
   No-target fallback knock also uses heldDir.
   Control follows YOUR pass to the receiver (user-initiated, FIFA-style).
-- BALL GRAVITY ON RECEPTION (added after "receiver runs away and misses the
-  pass"; v2 after "I keep a direction pressed and they run off and miss"):
+- BALL GRAVITY / AUTO-RECEIVE ON RECEPTION (added after "receiver runs away and
+  misses the pass"; v2 after "I keep a direction pressed and they run off and
+  miss"; v3 after "the receiver STILL doesn't move to get the ball — it stops
+  short somewhere else and they just move in the direction I'm pressing"):
   passAssisted sets `this.passReceiver = target` (right after the null-target
-  check, so all branches share it); cleared in resolvePossession (once
-  possession resolves) and resetKickoff. In updateControlled's movement `else`
-  block, while `incoming && p === this.passReceiver`, we PREDICT whether the
-  user's CURRENT held run will actually intercept the ball: a stepped 1.3s
-  simulation (stepT 0.05) advances the player at the input-intended velocity
-  and the ball with its exponential friction (grounded k=BALL_DECAY=1.5,
-  airborne k*0.12) — `dispK=(1-e^{-k·stepT})/k` per step — tracking minGap (the
-  closest the run gets to the ball) and meetX/Y (ball pos at that moment). This
-  friction model is essential: a constant-velocity approx made a slowing ball
-  look like it could always catch a runaway player, so gravity barely applied
-  — the v1 bug. `gravity = hasInput ? clamp((minGap-(CONTROL_DIST+6))/45,0,1) :
-  1`. So if the current run already meets the ball (minGap within reach) →
-  gravity 0, run untouched; if it would miss → ramps to full override toward
-  meetX/Y; no arrow held → full auto. Heading = lerp(input, dir-to-meet,
-  gravity); speed bumps to RUN_SPEED when gravity>0.25 (unless sprinting) so
-  they can actually get there.
+  check, so all branches share it — incl. lofted/long, since it's set before
+  those early returns); cleared in resolvePossession (once possession resolves)
+  and resetKickoff. In updateControlled's movement `else` block, while
+  `incoming && p === this.passReceiver` (incoming = !owns && owner===null &&
+  lastKicker.team===home — stays TRUE even after the ball stops short, so the
+  receiver keeps going to it). 
+  v3 REWRITE — the v1/v2 design asked "will the user's CURRENT held run happen to
+  intercept the ball?" and only nudged when it'd miss. That OSCILLATES: the
+  instant gravity nudged toward the ball the predicted run looked fine again →
+  gravity dropped to 0 → revert to input → drift away → repeat, so the receiver
+  parked SHORT and never collected it. Now we instead SOLVE for the meeting
+  point and commit: march the ball forward (stepT 0.05, up to 2.5s, exponential
+  friction grounded k=BALL_DECAY=1.5 / airborne k*0.12, `dispK=(1-e^{-k·stepT})
+  /k` per step); the first ball position the receiver can run onto in time
+  (`tReach = max(0, gap-CONTROL_DIST)/runSpeed <= t`, runSpeed = sprint?SPRINT:
+  RUN) is the interception → meetX/Y. If never catchable in the window, meetX/Y
+  = where the ball ENDS UP (last sim point) — so a pass that stops short is still
+  chased down. Then: if dist-to-meet > CONTROL_DIST, steer mostly at it —
+  `heading = dirToMeet*(1-inputW) + input*inputW`, inputW = hasInput?0.3:0 — so
+  the user can only bias the APPROACH ANGLE (which side to take it on), never
+  steer the receiver off a ball they'd otherwise miss; speed→RUN_SPEED (unless
+  sprinting). Once the ball is within CONTROL_DIST (at feet), full control hands
+  back to the user.
 - GOALKEEPER REWORK (added after "keeper deflects onto shooter / too passive /
   no pickup / no control-switch / W rush"). 5 changes in engine.ts:
   (1) ACTIVE POSITIONING — `keeperTarget` replaced by `keeperPlan(p)` returning
