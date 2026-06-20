@@ -1124,8 +1124,12 @@ export class PitchKickGame {
     // Charge controls shot power across a clearly-felt range: even an
     // untapped shot has real pace (strong base), and a full bar is a blast
     // (~2.2x the base). Harder shots rise more — a full blast lifts toward
-    // the top corners, while a placed side-foot stays low and grounded.
-    const loft = M(0.6) + charge * M(7);
+    // the top corners, while a placed side-foot stays low and skims the turf.
+    // `loft` is the UPWARD launch velocity (px/s); with GRAVITY=M(46) the apex
+    // height is loft²/(2·GRAVITY), so these values arc the ball a few px off
+    // the deck on a placed effort up to ~M(2) (just under the M(2.44) bar) on
+    // a full-power drive — a clearly-visible rising shot that scales with power.
+    const loft = M(4) + charge * M(9.5);
     // Shots scatter — and the harder you hit it, the LESS precise it is (FIFA:
     // a power blast can fly wide of the post, while a placed side-foot is far
     // tighter). The charge term dominates so full-power efforts genuinely miss
@@ -2320,7 +2324,10 @@ export class PitchKickGame {
         { x: 0, y: gy },
         640 * shotPowerMul(p.ratings),
         p,
-        0,
+        // Lift the CPU's strike off the deck too (was a flat 0 = always
+        // grounded) so its shots arc like the player's — a rising drive that
+        // stays under the bar.
+        M(8),
         0.05 * shotSpreadMul(p.ratings),
       );
       return;

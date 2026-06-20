@@ -791,8 +791,14 @@ game state yet (no Stores/queries for gameplay).
   peaked at 0 → most kicks near-perfect, rare big sprays). Short/ground passes
   use the tight default 0.03; LONG ball 0.045; SHOTS the widest, 0.05+charge*
   0.045 (a power blast is less accurate than a placed side-foot). SHOTS:
-  loft=M(0.6)+charge*M(7) (driven, rises slightly, stays
-  under bar). LONG PASS (A) = BALLISTIC LOFT: solves hang time T=clamp(0.62+
+  loft=M(4)+charge*M(9.5) (apex height = loft²/(2·GRAVITY) → a placed effort
+  skims a few px off the deck, a full-power drive arcs to ~M(2), just under the
+  M(2.44) bar — a clearly-visible RISING shot that scales with power). BUMPED
+  from the old loft=M(0.6)+charge*M(7) on user note "when shooting the ball is
+  always on the ground — it should lift at least a little, stronger shots more"
+  (the old velocities only lifted ~0.1px at low charge / ~13px at full, barely
+  visible vs GRAVITY=M(46)). CPU shot (updateAwayCarrier, p.x<300) was a flat
+  loft=0 (always grounded) → now M(8) so the CPU's strikes arc too. LONG PASS (A) = BALLISTIC LOFT: solves hang time T=clamp(0.62+
   d/M(70)+charge*0.25,0.6,1.5), vz=0.5*GRAVITY*T, hspeed=d/T*1.12 → flies
   over defenders, drops on receiver. Short/through stay grounded. handleGoals
   rejects balls with z>M(2.44) (over the bar). drawBall lifts sprite by
