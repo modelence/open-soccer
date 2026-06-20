@@ -790,7 +790,20 @@ game state yet (no Stores/queries for gameplay).
   (1+0.05*kickNoise()), where `kickNoise()` = `random()-random()` (triangular,
   peaked at 0 → most kicks near-perfect, rare big sprays). Short/ground passes
   use the tight default 0.03; LONG ball 0.045; SHOTS the widest, 0.05+charge*
-  0.045 (a power blast is less accurate than a placed side-foot). SHOTS:
+  0.045 (a power blast is less accurate than a placed side-foot).
+  SHOT/PASS POWER IS REAL-LIFE-ANCHORED (px/s ×0.172 = km/h, PX_PER_M=20.95),
+  same approach as movement speeds. SHOT launch = (400+330*charge)*shotPowerMul:
+  charge 0 (placed) = 400 px/s ≈ 69 km/h, charge 1 (avg striker) = 730 ≈ 125 km/h,
+  elite (shotPowerMul ~1.10) ≈ 137 km/h — matches the hardest real strikes.
+  REDUCED from the old (620+720*charge) which peaked at ~230 km/h (avg) / ~252
+  (elite) — faster than any shot ever recorded — on user note "shots are too
+  strong, make it closer to real life". CPU shot reduced 640→600 px/s (~103 km/h).
+  PASS launch is FRICTION-COMPENSATED (passPower=1.5*d+arrival) to ARRIVE at the
+  receiver at a fixed speed (short 260 px/s ≈45 km/h, through 240 ≈41 km/h) ×
+  weight scale=0.84+0.38*charge (band TIGHTENED from 0.78+0.55*charge so a tap
+  isn't limp and a full-charge drive doesn't rocket past the target); launch caps
+  lowered short 880→780, through 1050→920 (≈134/158 km/h ground-pass ceiling).
+  SHOTS:
   loft=M(4)+charge*M(9.5) (apex height = loft²/(2·GRAVITY) → a placed effort
   skims a few px off the deck, a full-power drive arcs to ~M(2), just under the
   M(2.44) bar — a clearly-visible RISING shot that scales with power). BUMPED

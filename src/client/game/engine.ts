@@ -1121,9 +1121,12 @@ export class PitchKickGame {
       }
     }
 
-    // Charge controls shot power across a clearly-felt range: even an
-    // untapped shot has real pace (strong base), and a full bar is a blast
-    // (~2.2x the base). Harder shots rise more — a full blast lifts toward
+    // Charge controls shot power across a REAL-LIFE-ANCHORED range (px/s via
+    // PX_PER_M=20.95, ×0.172 = km/h): a placed side-foot (charge 0) leaves the
+    // boot at 400 px/s ≈ 69 km/h, a full-power blast (charge 1, avg striker)
+    // at 730 px/s ≈ 125 km/h, and an elite finisher (shotPowerMul ~1.10) tops
+    // out near 137 km/h — matching the hardest real strikes, not the old
+    // 230 km/h cannon. Harder shots rise more — a full blast lifts toward
     // the top corners, while a placed side-foot stays low and skims the turf.
     // `loft` is the UPWARD launch velocity (px/s); with GRAVITY=M(46) the apex
     // height is loft²/(2·GRAVITY), so these values arc the ball a few px off
@@ -1139,7 +1142,7 @@ export class PitchKickGame {
     const shotSpread = (0.06 + charge * 0.2) * shotSpreadMul(kicker.ratings);
     this.kickBallToward(
       { x: goalX, y: bestY },
-      (620 + 720 * charge) * shotPowerMul(kicker.ratings),
+      (400 + 330 * charge) * shotPowerMul(kicker.ratings),
       kicker,
       loft,
       shotSpread,
@@ -1250,12 +1253,15 @@ export class PitchKickGame {
     // given speed (exponential friction covers (v0 - vEnd)/BALL_DECAY px),
     // instead of dying en route like the old distance multipliers did.
     const base = isThrough
-      ? this.passPower(d, 240, 1050)
-      : this.passPower(d, 260, 880);
+      ? this.passPower(d, 240, 920)
+      : this.passPower(d, 260, 780);
     // FIFA assist: targeting is automatic, but the gauge still matters —
     // undercharged passes arrive soft/short, overcharged ones run past
-    // the receiver. charge 0.4 ≈ the "right" weight.
-    const scale = 0.78 + 0.55 * charge;
+    // the receiver. charge ~0.4 ≈ the "right" weight. Band tightened from
+    // 0.78–1.33 to 0.84–1.22 so neither extreme is wild: a tap pass isn't
+    // limp and a full-charge drive doesn't rocket 27m past a 12m target —
+    // the launch ceiling (780 px/s ≈ 134 km/h ground pass) is realistic too.
+    const scale = 0.84 + 0.38 * charge;
     // PASSING: accurate passers weight it better and misplace it less often.
     const power = Math.min(base * scale * passPowerMul(kicker.ratings), 1600);
 
@@ -2322,7 +2328,7 @@ export class PitchKickGame {
       // less accurately, a clinical one rifles it in.
       this.kickBallToward(
         { x: 0, y: gy },
-        640 * shotPowerMul(p.ratings),
+        600 * shotPowerMul(p.ratings),
         p,
         // Lift the CPU's strike off the deck too (was a flat 0 = always
         // grounded) so its shots arc like the player's — a rising drive that
@@ -2352,7 +2358,7 @@ export class PitchKickGame {
         const d = dist(this.ball, best);
         this.kickBallToward(
           { x: best.x + best.vx * 0.2, y: best.y + best.vy * 0.2 },
-          this.passPower(d, 260, 880) * passPowerMul(p.ratings),
+          this.passPower(d, 260, 780) * passPowerMul(p.ratings),
           p,
           0,
           0.03 * passSpreadMul(p.ratings),
