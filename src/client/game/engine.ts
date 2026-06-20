@@ -2610,12 +2610,15 @@ export class PitchKickGame {
     // gets a hand/body to it and PARRIES it away to the side (toward the
     // nearer touchline), so the ball spills wide rather than sticking to his
     // hands or rebounding straight back into the striker's path.
+    // Threshold lowered 820→600 (≈ a charge-0.36 shot) so only WEAK/placed
+    // shots are caught cleanly — any firmly-struck shot is parried, not held
+    // (user: "the GK catches shots too easily, it should only catch weaker ones").
     if (
       best &&
       best.isGK &&
       best !== prev &&
       (!prev || prev.team !== best.team) &&
-      ballSpeed > 820
+      ballSpeed > 600
     ) {
       this.keeperParry(best, ballSpeed);
       return;
@@ -2746,8 +2749,12 @@ export class PitchKickGame {
     // Reaction buffer grows with shot distance, shrinks with shot pace. A
     // point-blank blast → almost no buffer (he can only save what's hit at him);
     // a 25-yarder → a real dive range across the goal.
+    // Pace penalty STRENGTHENED (starts at 520 not 680, scales 0.04 not 0.02,
+    // caps at 34 not 16) so a fiercely-struck shot collapses his reach toward his
+    // body — the hardest, well-placed shots now BEAT him for a goal instead of
+    // being magnetically reached (user: "GK catches strong shots too easily").
     const distBuf = clamp((shotDist - 120) * 0.05, 0, 26);
-    const pacePenalty = clamp((ballSpeed - 680) * 0.02, 0, 16);
+    const pacePenalty = clamp((ballSpeed - 520) * 0.04, 0, 34);
     const buffer = Math.max(0, distBuf - pacePenalty);
     return gk.r + this.ball.r + buffer;
   }

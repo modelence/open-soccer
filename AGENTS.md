@@ -400,9 +400,10 @@ game state yet (no Stores/queries for gameplay).
   speed=clamp(ballSpeed*0.42,200,380); ball nudged off the keeper's body to that
   side, `owner=null`, `ballFree=0.45` so it spills WIDE as a loose rebound (a
   striker must run onto it) rather than sticking to his hands or rebounding
-  straight back. Shots at/under 820 speed are still CAUGHT cleanly and held in
-  hands (existing catch path). Shot speeds are 620+720*charge (620 untapped..1340
-  full blast), so ~placed shots are caught, real blasts are parried.
+  straight back. Shots at/under the threshold are still CAUGHT cleanly and held.
+  PARRY THRESHOLD LOWERED 820→600 (user "GK catches shots too easily, should only
+  catch weaker ones"): with shot power=(400+560*charge), 600 px/s ≈ charge 0.36,
+  so only weak/placed shots are caught cleanly — anything firmly struck is parried.
   AWAY-KEEPER HOLD BEFORE DISTRIBUTING (added after "I don't see anything that
   changed — the keeper still immediately kicks the ball forward, even on the
   weakest shot, and never catches"): the ROOT CAUSE the user was hitting — the
@@ -430,13 +431,14 @@ game state yet (no Stores/queries for gameplay).
   - A SHOT (>=340): reach = `gk.r + ball.r + buffer` where the buffer models how
     much time he had to REACT — `distBuf = clamp((shotDist-120)*0.05, 0, 26)`
     (grows with how far away the shot was struck, `shotDist = dist(lastKicker,
-    gk)`) MINUS `pacePenalty = clamp((ballSpeed-680)*0.02, 0, 16)` (harder shots
-    give less time), floored at 0. So a point-blank blast → buffer≈0 (he only
+    gk)`) MINUS `pacePenalty = clamp((ballSpeed-520)*0.04, 0, 34)` (harder shots
+    give less time; STRENGTHENED from (ballSpeed-680)*0.02 cap 16 so the hardest
+    well-placed shots beat him outright), floored at 0. So a point-blank blast → buffer≈0 (he only
     saves what's hit straight at his body, ball can fly past into the corner);
     a 20-yarder → a real dive range across goal; a tame shot from distance →
     comfortably reached. This is the main lever that stops the keeper reaching
     every shot regardless of pace/range. Combine with the ~72% lateral tracking
-    (positioning) and the catch(<=820)/parry(>820) split: weak shots within reach
+    (positioning) and the catch(<=600)/parry(>600) split: weak shots within reach
     are caught & held, fierce shots within reach are parried wide, and shots he
     can't react to beat him cleanly.
   KEEPER DIVE REACTION + WIDER SHOT SPREAD (added after "the GK doesn't react on
