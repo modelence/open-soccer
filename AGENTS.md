@@ -119,7 +119,12 @@ game state yet (no Stores/queries for gameplay).
   support him at the goal line, and play stalled. Fix: `updateControlled` starts
   with a practice guard that immediately hands control off any home GK to the
   nearest outfielder, so the keeper is always auto-managed (holds then clears via
-  homeKeeperDistribute) and never a user-controlled dead end.
+  homeKeeperDistribute) and never a user-controlled dead end. SECOND pass-back
+  symptom (GK "teleported/disappeared into the box"): `constrainKeeperWithBall`
+  snaps a ball-holding keeper back inside his 16.5m box every frame, so a GK who
+  came upfield to collect the back-pass got yanked ~16m back the instant he gained
+  possession. Fix: that fn early-returns for the HOME keeper in practice, so he
+  collects the pass with his feet wherever he is, holds, then clears upfield.
 - FULL-SCREEN LAYOUT (added after "make the field take the full screen, thinner
   top bar, no left/right margins, wider field"): outer is `flex flex-col` (NOT
   items-center, no page padding). Header is SLIM (`px-4 py-2`, brand `text-2xl

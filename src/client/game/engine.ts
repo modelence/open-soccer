@@ -3012,6 +3012,10 @@ export class PitchKickGame {
   private constrainKeeperWithBall() {
     const gk = this.owner;
     if (!gk || !gk.isGK) return;
+    // Practice: a back-pass to your keeper is collected with his FEET wherever
+    // he is, so don't yank him back into the box (the snap looked like he
+    // teleported/disappeared). He holds briefly then clears upfield in place.
+    if (this.practice && gk.team === 'home') return;
     const ownGoalX = gk.team === 'home' ? 0 : FIELD_W;
     const depth = M(16.5); // penalty area is 16.5 m deep
     const halfW = M(20.16); // ...and 40.32 m wide
