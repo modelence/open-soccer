@@ -101,11 +101,18 @@ game state yet (no Stores/queries for gameplay).
   to `updatePracticeAway` (GK-only: saves via the normal keeper systems, and when
   he gathers, `practiceKeeperClear` hoofs it back toward the home players instead
   of `keeperDistribute` which would find no teammates); `checkOutOfPlay` respawns
-  the ball centrally via `practiceResetBall` instead of throw-ins/corners/goal
-  kicks; `handleGoals` counts strikes into the right (keeper's) goal as
-  `homeScore++` with a quick "GOAL!" then `practiceResetBall` — no celebration/
-  kickoff. The away GK saving/diving logic (`updateKeeperReactions`, `keeperParry`)
-  is UNCHANGED and works with a GK-only away side.
+  via `practiceResetBall` instead of throw-ins/corners/goal kicks; `handleGoals`
+  counts strikes into the right (keeper's) goal as `homeScore++` with a quick
+  "GOAL!" + a 1s `freeze` then `practiceResetBall` — no celebration/kickoff. The
+  away GK saving/diving logic (`updateKeeperReactions`, `keeperParry`) is UNCHANGED
+  and works with a GK-only away side. Teammate off-ball positioning uses
+  `practiceSupportPlan` (NOT `offBallPlan`): mates fan into their vertical lane
+  and hold a short-pass distance around the CARRIER (capped at `FIELD_W - M(24)`,
+  never the goal line) so there's always a passing option. `practiceResetBall`
+  RE-STAGES everyone via `placePracticePlayers` (early bug: it only moved the ball,
+  leaving players upfield → pitch looked empty/stuck after a goal). The top-left
+  scoreboard pill is HIDDEN in practice (`mode !== 'practice'` in HomePage); a
+  small volt "PRACTICE" badge sits there instead.
 - FULL-SCREEN LAYOUT (added after "make the field take the full screen, thinner
   top bar, no left/right margins, wider field"): outer is `flex flex-col` (NOT
   items-center, no page padding). Header is SLIM (`px-4 py-2`, brand `text-2xl

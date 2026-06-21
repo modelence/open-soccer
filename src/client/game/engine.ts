@@ -373,8 +373,8 @@ export class PitchKickGame {
    *  — just space to knock it about and shoot at a live GK. */
   private placePracticePlayers() {
     const out = this.homePlayers.filter((p) => !p.isGK);
-    const xs = [FIELD_W * 0.42, FIELD_W * 0.56, FIELD_W * 0.5, FIELD_W * 0.64];
-    const ys = [FIELD_H * 0.32, FIELD_H * 0.34, FIELD_H * 0.68, FIELD_H * 0.66];
+    const xs = [FIELD_W * 0.45, FIELD_W * 0.6, FIELD_W * 0.5, FIELD_W * 0.62];
+    const ys = [FIELD_H * 0.22, FIELD_H * 0.4, FIELD_H * 0.6, FIELD_H * 0.78];
     out.forEach((p, i) => {
       p.x = xs[i % xs.length];
       p.y = ys[i % ys.length];
@@ -405,21 +405,17 @@ export class PitchKickGame {
     this.camY = clamp(starter.y, CAM_Y_MIN, CAM_Y_MAX);
   }
 
-  /** Put the ball back in the middle of the practice area as a loose ball the
-   *  user runs onto — no restart ceremony, keeping free play continuous. */
+  /** Re-stage the practice pitch after a goal or the ball going out: put every
+   *  player back on their support marks and the ball on a central player, so
+   *  play resumes cleanly instead of leaving the pitch empty/stuck. */
   private practiceResetBall() {
-    this.owner = null;
-    this.ball.x = FIELD_W * 0.5;
-    this.ball.y = FIELD_H / 2;
-    this.ball.z = 0;
-    this.ball.vx = this.ball.vy = this.ball.vz = 0;
     this.lastKicker = null;
-    this.lastTouchTeam = 'home';
     this.kickerLock = 0;
     this.passReceiver = null;
     this.aerialReceiver = null;
     this.ballFree = 0;
     this.gkHoldTimer = 0;
+    this.placePracticePlayers();
   }
 
   private setMessage(msg: string, secs: number) {
@@ -2142,6 +2138,38 @@ export class PitchKickGame {
     return { pos: this.clampTarget(t), speed: baseSpeed };
   }
 
+  /** Practice off-ball positioning: teammates stay as SUPPORT around the
+   *  carrier (fanned out into their vertical lane, only a touch ahead/behind)
+   *  so there's always a passing option — they never sprint to the goal line.
+   *  Keeps the ball reachable for rehearsing passes and lay-offs. */
+  private practiceSupportPlan(p: PlayerEntity): { pos: Vec; speed: number } {
+    const ref = this.controlled ?? { x: this.ball.x, y: this.ball.y };
+    // Horizontal bias from the player's staged slot: deeper slots offer a
+    // back option, advanced slots an outlet ahead — but always within a
+    // short pass and well short of the keeper's goal line.
+    const fwd = clamp(p.anchor.x - FIELD_W * 0.5, -M(12), M(12));
+    let t = {
+      x: clamp(ref.x + fwd, M(25), FIELD_W - M(24)),
+      y: clamp(
+        p.anchor.y + (this.ball.y - FIELD_H / 2) * 0.15,
+        M(6),
+        FIELD_H - M(6),
+      ),
+    };
+    // Don't crowd the carrier — hold at least a passing distance away.
+    const dx = t.x - ref.x;
+    const dy = t.y - ref.y;
+    const d = Math.hypot(dx, dy);
+    const MIN = M(9);
+    if (d < MIN && d > 0.1) {
+      t = {
+        x: clamp(ref.x + (dx / d) * MIN, M(25), FIELD_W - M(24)),
+        y: clamp(ref.y + (dy / d) * MIN, M(6), FIELD_H - M(6)),
+      };
+    }
+    return { pos: this.clampTarget(t), speed: TEAMMATE_SPEED };
+  }
+
   private updateHomeTeammates(dt: number) {
     const awayCarrier =
       this.owner && this.owner.team === 'away' ? this.owner : null;
@@ -2202,7 +2230,9 @@ export class PitchKickGame {
         this.moveToward(p, this.containTarget(p, awayCarrier), PRESS_SPEED, dt);
         continue;
       }
-      const plan = this.offBallPlan(p, TEAMMATE_SPEED);
+      const plan = this.practice
+        ? this.practiceSupportPlan(p)
+        : this.offBallPlan(p, TEAMMATE_SPEED);
       // Jog into position, but RUN when badly out of position.
       const sp =
         dist(p, plan.pos) > 240 ? Math.max(plan.speed, RUN_SPEED) : plan.speed;
@@ -3258,8 +3288,9 @@ export class PitchKickGame {
     if (this.practice) {
       if (this.ball.x >= FIELD_W - 2) {
         this.homeScore += 1;
-        this.setMessage('GOAL!', 1.3);
+        this.setMessage('GOAL!', 1.2);
         this.practiceResetBall();
+        this.freeze = 1.0; // brief hold so the GOAL! reads before resuming
       } else if (this.ball.x <= 2) {
         this.practiceResetBall();
       }

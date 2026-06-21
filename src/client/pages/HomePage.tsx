@@ -220,8 +220,15 @@ export default function HomePage() {
           }}
         />
 
+        {/* Practice badge replaces the scoreboard — no score/team display. */}
+        {phase === 'playing' && mode === 'practice' && (
+          <div className="absolute top-3 left-3 flex items-center h-9 px-3 rounded-md bg-volt-500 text-night-950 font-heading uppercase text-xs font-bold tracking-[0.25em] shadow-lg shadow-black/40 select-none animate-fade-in">
+            Practice
+          </div>
+        )}
+
         {/* FIFA-style broadcast scoreboard. */}
-        {phase === 'playing' && (
+        {phase === 'playing' && mode !== 'practice' && (
           <div className="absolute top-3 left-3 flex items-stretch h-9 rounded-md overflow-hidden shadow-lg shadow-black/40 font-heading select-none animate-fade-in text-sm">
             <span
               className="w-1.5 self-stretch"
@@ -247,7 +254,7 @@ export default function HomePage() {
               style={{ backgroundColor: away.color }}
             />
             <span className="flex items-center px-2.5 bg-volt-500 text-night-950 text-sm tabular-nums font-bold tracking-tight">
-              {mode === 'practice' ? 'PRACTICE' : fmtTime(hud.clock)}
+              {fmtTime(hud.clock)}
             </span>
           </div>
         )}
