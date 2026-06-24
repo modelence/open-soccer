@@ -13,6 +13,7 @@ import {
   CANVAS_H,
   type HudState,
 } from '@/client/game/engine';
+import { selectRendererFactory } from '@/client/game/rendererSelect';
 import { TEAMS, type TeamData } from '@/client/game/teams';
 import { findCurrentOrNextMatch, type Match } from '@/client/game/teams/schedule';
 import {
@@ -82,6 +83,8 @@ export default function HomePage() {
   // Boot the canvas game once the match phase begins.
   useEffect(() => {
     if (phase !== 'playing' || !canvasRef.current) return;
+    // Pick the rendering backend (2D default; ?renderer=3d for the Three.js spike).
+    const createRenderer = selectRendererFactory();
     let game: PitchKickGame;
     if (mode === 'practice') {
       // Free-form practice: a handful of home players + a lone away keeper.
@@ -98,10 +101,12 @@ export default function HomePage() {
       game = new PitchKickGame(canvasRef.current, setHud, pHome, pAway, {
         practice: true,
         bindings,
+        createRenderer,
       });
     } else {
       game = new PitchKickGame(canvasRef.current, setHud, home, away, {
         bindings,
+        createRenderer,
       });
     }
     gameRef.current = game;

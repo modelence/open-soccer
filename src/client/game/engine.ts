@@ -61,7 +61,8 @@ import {
 } from './ratings';
 import { CAM_MIN, CAM_MAX, CAM_Y_MIN, CAM_Y_MAX } from './projection';
 import type { Vec, Team, PlayerEntity, StateListener } from './types';
-import { renderScene } from './render';
+import type { GameRenderer, RendererFactory } from './renderer';
+import { Canvas2DRenderer } from './render2d';
 
 // Re-exports so consumers (e.g. HomePage) can import these from the engine entry.
 export type { TeamData } from './teams/types';
@@ -86,7 +87,7 @@ const MOVE_KEYS = new Set([
 // `./teams/` for the per-country data.
 
 export class PitchKickGame {
-  private ctx: CanvasRenderingContext2D;
+  private renderer: GameRenderer;
   private raf = 0;
   private last = 0;
   private running = false;
@@ -225,11 +226,17 @@ export class PitchKickGame {
     listener: StateListener,
     homeTeam: TeamData,
     awayTeam: TeamData,
-    opts: { practice?: boolean; bindings?: KeyBindings } = {},
+    opts: {
+      practice?: boolean;
+      bindings?: KeyBindings;
+      /** Swap the rendering backend. Defaults to the original 2D canvas
+       *  renderer; pass a factory (e.g. the Three.js one) to render in 3D. */
+      createRenderer?: RendererFactory;
+    } = {},
   ) {
-    const ctx = canvas.getContext('2d');
-    if (!ctx) throw new Error('Canvas 2D context unavailable');
-    this.ctx = ctx;
+    const makeRenderer =
+      opts.createRenderer ?? ((c: HTMLCanvasElement) => new Canvas2DRenderer(c));
+    this.renderer = makeRenderer(canvas);
     this.listener = listener;
     this.homeTeam = homeTeam;
     this.awayTeam = awayTeam;
@@ -295,6 +302,7 @@ export class PitchKickGame {
     cancelAnimationFrame(this.raf);
     window.removeEventListener('keydown', this.onKeyDown);
     window.removeEventListener('keyup', this.onKeyUp);
+    this.renderer.dispose();
   }
 
   /** Pause/resume the simulation (e.g. while the settings popup is open). The
@@ -3502,7 +3510,7 @@ export class PitchKickGame {
   // ---- render (TV broadcast pseudo-3D) ------------------------------------
 
   private render() {
-    renderScene(this.ctx, {
+    this.renderer.render({
       camX: this.camX,
       camY: this.camY,
       ball: this.ball,
